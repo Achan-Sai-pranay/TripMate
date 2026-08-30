@@ -1,0 +1,393 @@
+package com.example.tripmate.ui.screens.assistant
+
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.example.tripmate.model.AssistantSuggestion
+import com.example.tripmate.model.ChatMessage
+import com.example.tripmate.ui.components.BottomNavTab
+import com.example.tripmate.ui.components.TripPilotBottomNav
+import com.example.tripmate.ui.theme.Dimens
+import kotlinx.coroutines.launch
+
+private const val ASSISTANT_USER_AVATAR_URL =
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuBqy6luG88wyBEaehc3k7YMnIHoQ2HZcdnrH5s-xz5cUz_ntiGlPNThuRFjWDw7DcngWwryr2rvj1IiKzWUtGN3bVs4y9t_4FgNe6RhvyfmivKLLzocIfEmzZ1orvfZigGhI29LC1_g-EhEiCMvkC5FGIaVl_UtNMvRIEBZh3SilOIRioEIIYE9HOfoNFMu7M18urmLeut41XZ6Bn1oZIUEJyNNHJHXuDHCPX2lQnoRDJ_FFQa23W2mHw"
+
+@Composable
+fun AiAssistantScreen(
+    onExploreClick: () -> Unit,
+    onMyTripsClick: () -> Unit,
+    onProfileClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: AssistantViewModel = viewModel()
+) {
+    var inputText by remember { mutableStateOf("") }
+    val messages by viewModel.messages.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+
+    val suggestions = remember {
+        listOf(
+            AssistantSuggestion("Check my remaining budget", "Review expenses for Paris trip", Icons.Filled.AccountBalanceWallet),
+            AssistantSuggestion("Find a nearby cafe", "Looking for strong espresso and wifi", Icons.Filled.LocalCafe),
+            AssistantSuggestion("Replan Day 2 for rain", "Indoor activities in Kyoto", Icons.Filled.Cloud)
+        )
+    }
+
+    // Surface API/network errors as a snackbar instead of failing silently
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.dismissError()
+        }
+    }
+
+    // Auto-scroll to the latest message as the conversation grows
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.lastIndex)
+        }
+    }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = {
+            AssistantTopBar(
+                avatarUrl = ASSISTANT_USER_AVATAR_URL,
+                onNotificationsClick = {
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("You're all caught up — no new notifications")
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            TripPilotBottomNav(
+                selectedTab = BottomNavTab.ASSISTANT,
+                onTabSelected = { tab ->
+                    when (tab) {
+                        BottomNavTab.EXPLORE -> onExploreClick()
+                        BottomNavTab.MY_TRIPS -> onMyTripsClick()
+                        BottomNavTab.PROFILE -> onProfileClick()
+                        BottomNavTab.ASSISTANT -> { /* already here */ }
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = Dimens.marginMobile, vertical = Dimens.md),
+                verticalArrangement = Arrangement.spacedBy(Dimens.md)
+            ) {
+                item {
+                    AiOrbSection(modifier = Modifier.padding(vertical = Dimens.lg))
+                }
+
+                if (messages.isEmpty()) {
+                    item {
+                        Text(
+                            text = "SUGGESTIONS",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = Dimens.xs)
+                        )
+                    }
+                    itemsIndexed(suggestions) { _, suggestion ->
+                        SuggestionCard(
+                            suggestion = suggestion,
+                            onClick = { viewModel.sendMessage(suggestion.title) },
+                            modifier = Modifier.padding(bottom = Dimens.sm)
+                        )
+                    }
+                } else {
+                    itemsIndexed(messages) { _, message ->
+                        ChatBubble(message = message)
+                    }
+                    if (isLoading) {
+                        item { TypingIndicator() }
+                    }
+                }
+            }
+
+            AssistantInputBar(
+                value = inputText,
+                onValueChange = { inputText = it },
+                onAttachClick = { /* wired up in the features pass */ },
+                onSendClick = {
+                    if (inputText.isNotBlank()) {
+                        viewModel.sendMessage(inputText)
+                        inputText = ""
+                    }
+                },
+                sendEnabled = !isLoading
+            )
+        }
+    }
+}
+
+@Composable
+private fun AssistantTopBar(
+    avatarUrl: String,
+    onNotificationsClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.marginMobile, vertical = Dimens.xs),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = "Profile avatar",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            )
+            Text(
+                text = "TripPilot",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = Dimens.sm)
+            )
+        }
+        IconButton(onClick = onNotificationsClick) {
+            Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun AiOrbSection(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "orb-pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing), RepeatMode.Reverse),
+        label = "scale"
+    )
+    Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .scale(pulseScale)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary)
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(40.dp))
+        }
+        Text(
+            text = "Ask me anything",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = Dimens.md)
+        )
+    }
+}
+
+@Composable
+private fun ChatBubble(message: ChatMessage, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = if (message.isFromUser) Arrangement.End else Arrangement.Start
+    ) {
+        Card(
+            modifier = Modifier.widthIn(max = 280.dp),
+            shape = RoundedCornerShape(Dimens.radiusMd),
+            colors = CardDefaults.cardColors(
+                containerColor = if (message.isFromUser) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceContainerLowest
+            ),
+            border = if (message.isFromUser) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceContainerHighest)
+        ) {
+            Text(
+                text = message.text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (message.isFromUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(Dimens.md)
+            )
+        }
+    }
+}
+
+@Composable
+private fun TypingIndicator(modifier: Modifier = Modifier) {
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+        Card(
+            shape = RoundedCornerShape(Dimens.radiusMd),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceContainerHighest)
+        ) {
+            Row(modifier = Modifier.padding(Dimens.md), verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    text = "TripPilot is typing…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = Dimens.sm)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionCard(suggestion: AssistantSuggestion, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Dimens.radiusMd),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceContainerHighest)
+    ) {
+        Row(modifier = Modifier.padding(Dimens.md), verticalAlignment = Alignment.Top) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(Dimens.radiusMd))
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(suggestion.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            }
+            Column(modifier = Modifier.padding(start = Dimens.md)) {
+                Text(text = suggestion.title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp), color = MaterialTheme.colorScheme.onSurface)
+                Text(text = suggestion.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AssistantInputBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onAttachClick: () -> Unit,
+    onSendClick: () -> Unit,
+    sendEnabled: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.marginMobile, vertical = Dimens.md)
+            .clip(RoundedCornerShape(Dimens.radiusFull))
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .border(1.dp, MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(Dimens.radiusFull))
+            .padding(start = Dimens.md, end = 6.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            placeholder = { Text("Ask TripPilot anything...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary
+            )
+        )
+        IconButton(onClick = onAttachClick) {
+            Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Attach file", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(if (sendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            IconButton(onClick = onSendClick, enabled = sendEnabled) {
+                Icon(Icons.Filled.ArrowUpward, contentDescription = "Send", tint = if (sendEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
