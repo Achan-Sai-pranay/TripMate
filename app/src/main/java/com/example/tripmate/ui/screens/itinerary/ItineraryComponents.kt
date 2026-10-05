@@ -357,6 +357,9 @@ fun TimelineItemRow(
     onDeleteClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val bgImageUrl = item.imageUrl?.takeIf { it.isNotBlank() }
+        ?: com.example.tripmate.util.DestinationImageProvider.getImageFor(item.title)
+
     Row(modifier = modifier.fillMaxWidth()) {
         // Timeline node + connector line
         Column(
@@ -389,173 +392,214 @@ fun TimelineItemRow(
             }
         }
 
-        // Activity card
+        // Activity card with scenic background image & gradient scrim
         Card(
             modifier = Modifier
                 .weight(1f)
                 .padding(start = Dimens.md, bottom = Dimens.lg),
-            shape = RoundedCornerShape(Dimens.radiusMd),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+            shape = RoundedCornerShape(Dimens.radiusLg),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
-            Column(modifier = Modifier.padding(Dimens.md)) {
-                item.imageUrl?.let { url ->
-                    AsyncImage(
-                        model = url,
-                        contentDescription = item.title,
-                        contentScale = ContentScale.Crop,
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // Background destination/activity photo
+                AsyncImage(
+                    model = bgImageUrl,
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+
+                // High contrast dark gradient scrim
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.50f),
+                                    Color.Black.copy(alpha = 0.70f),
+                                    Color.Black.copy(alpha = 0.92f)
+                                )
+                            )
+                        )
+                )
+
+                Column(modifier = Modifier.padding(Dimens.md)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(Dimens.radiusFull),
+                            color = com.example.tripmate.ui.theme.PrimaryOrange
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = item.time,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                if (item.isFixed) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PushPin,
+                                        contentDescription = "Fixed commitment",
+                                        tint = Color.White,
+                                        modifier = Modifier.padding(start = 4.dp).size(12.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Box {
+                            var menuExpanded by remember { mutableStateOf(false) }
+                            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(28.dp)) {
+                                Icon(
+                                    imageVector = Icons.Filled.MoreVert,
+                                    contentDescription = "More options",
+                                    tint = Color.White
+                                )
+                            }
+                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                                if (!item.isFixed) {
+                                    DropdownMenuItem(
+                                        text = { Text("Duplicate") },
+                                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                                        onClick = { menuExpanded = false; onDuplicateClick() }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                        onClick = { menuExpanded = false; onDeleteClick() }
+                                    )
+                                } else {
+                                    DropdownMenuItem(
+                                        text = { Text("This is a fixed commitment", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                        onClick = { menuExpanded = false },
+                                        enabled = false
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = Dimens.xs)
+                    )
+
+                    Row(
+                        modifier = Modifier.padding(top = Dimens.xs, bottom = Dimens.sm),
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
+                    ) {
+                        InfoChip(icon = Icons.Filled.Schedule, label = item.durationLabel, isDark = true)
+                        InfoChip(icon = Icons.Filled.Payments, label = item.costLabel, isDark = true)
+                    }
+
+                    // Glassmorphic "Why this?" box
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(128.dp)
                             .clip(RoundedCornerShape(Dimens.radiusMd))
-                            .padding(bottom = Dimens.md)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column {
-                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Text(
-                                text = item.time,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            if (item.isFixed) {
-                                Icon(
-                                    imageVector = Icons.Filled.PushPin,
-                                    contentDescription = "Fixed commitment",
-                                    tint = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.padding(start = 4.dp).size(14.dp)
-                                )
-                            }
-                        }
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                    }
-                    Box {
-                        var menuExpanded by remember { mutableStateOf(false) }
-                        IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(28.dp)) {
-                            Icon(
-                                imageVector = Icons.Filled.MoreVert,
-                                contentDescription = "More options",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                            if (!item.isFixed) {
-                                DropdownMenuItem(
-                                    text = { Text("Duplicate") },
-                                    leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
-                                    onClick = { menuExpanded = false; onDuplicateClick() }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                                    leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                    onClick = { menuExpanded = false; onDeleteClick() }
-                                )
-                            } else {
-                                DropdownMenuItem(
-                                    text = { Text("This is a fixed commitment", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                    onClick = { menuExpanded = false },
-                                    enabled = false
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.padding(top = Dimens.sm, bottom = Dimens.md),
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
-                ) {
-                    InfoChip(icon = Icons.Filled.Schedule, label = item.durationLabel)
-                    InfoChip(icon = Icons.Filled.Payments, label = item.costLabel)
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(Dimens.radiusMd))
-                        .background(MaterialTheme.colorScheme.surfaceBright)
-                        .border(1.dp, MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(Dimens.radiusMd))
-                        .padding(Dimens.sm)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AutoAwesome,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.size(18.dp).padding(top = 2.dp)
-                    )
-                    Column(modifier = Modifier.padding(start = Dimens.xs)) {
-                        Text(
-                            text = "Why this?",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = item.whyThis,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp)
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = Dimens.md),
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
-                ) {
-                    TextButton(
-                        onClick = onEditClick,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(Dimens.radiusMd))
-                            .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .background(Color.Black.copy(alpha = 0.45f))
+                            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(Dimens.radiusMd))
+                            .padding(Dimens.sm)
                     ) {
-                        Text(
-                            text = "Edit",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesome,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD54F),
+                            modifier = Modifier.size(16.dp).padding(top = 2.dp)
                         )
-                    }
-                    if (!item.isFixed) {
-                        OutlinedButton(
-                            onClick = onReplaceClick,
-                            enabled = !isReplacing,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(Dimens.radiusMd),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        Column(modifier = Modifier.padding(start = Dimens.xs)) {
+                            Text(
+                                text = "Why this?",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
                             )
+                            Text(
+                                text = item.whyThis,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.88f),
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+
+                    // Bottom Action Buttons with robust layout (no text clipping)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Dimens.sm),
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(Dimens.radiusMd),
+                            color = Color.White.copy(alpha = 0.22f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp)
+                                .clickable { onEditClick() }
                         ) {
-                            if (isReplacing) {
-                                androidx.compose.material3.CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Filled.SwapHoriz,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "Edit",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
                                 )
                             }
-                            Text(
-                                text = if (isReplacing) " Finding..." else " Replace",
-                                style = MaterialTheme.typography.labelMedium
-                            )
+                        }
+
+                        if (!item.isFixed) {
+                            Surface(
+                                shape = RoundedCornerShape(Dimens.radiusMd),
+                                color = Color.White,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp)
+                                    .clickable(enabled = !isReplacing) { onReplaceClick() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (isReplacing) {
+                                        androidx.compose.material3.CircularProgressIndicator(
+                                            modifier = Modifier.size(14.dp),
+                                            strokeWidth = 2.dp,
+                                            color = com.example.tripmate.ui.theme.PrimaryOrange
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Filled.SwapHoriz,
+                                            contentDescription = null,
+                                            tint = Color(0xFF1E293B),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+                                    Text(
+                                        text = if (isReplacing) "Finding..." else "Replace",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1E293B),
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -565,24 +609,29 @@ fun TimelineItemRow(
 }
 
 @Composable
-private fun InfoChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
+private fun InfoChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isDark: Boolean = false
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .clip(RoundedCornerShape(Dimens.radiusSm))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .background(if (isDark) Color.White.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surfaceContainer)
             .padding(horizontal = Dimens.sm, vertical = 4.dp)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = if (isDark) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(14.dp)
         )
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (isDark) FontWeight.Medium else FontWeight.Normal,
+            color = if (isDark) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 4.dp)
         )
     }

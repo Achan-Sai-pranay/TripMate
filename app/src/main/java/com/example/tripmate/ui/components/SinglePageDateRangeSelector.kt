@@ -23,6 +23,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -66,6 +67,14 @@ fun SinglePageDateRangeSelector(
         )
     }
 
+    var isSelectingEnd by remember { mutableStateOf(false) }
+
+    val todayMidnight = remember {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
     val monthYearFormat = remember { SimpleDateFormat("MMMM yyyy", Locale.getDefault()) }
     val daysOfWeek = remember { listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat") }
 
@@ -99,12 +108,20 @@ fun SinglePageDateRangeSelector(
                 )
             }
 
-            Text(
-                text = monthYearFormat.format(displayedMonthCal.time),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = monthYearFormat.format(displayedMonthCal.time),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = if (isSelectingEnd && startDateMillis == endDateMillis) "Select return date" else "Tap any date to change departure",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isSelectingEnd && startDateMillis == endDateMillis) PrimaryOrange else TextMuted,
+                    fontWeight = FontWeight.Medium
+                )
+            }
 
             IconButton(
                 onClick = {
@@ -179,6 +196,8 @@ fun SinglePageDateRangeSelector(
                             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
                         }
                         val cellMillis = currentCellCal.timeInMillis
+                        val isPast = cellMillis < todayMidnight
+
                         val isStart = currentCellCal.get(Calendar.YEAR) == startCal.get(Calendar.YEAR) &&
                                 currentCellCal.get(Calendar.DAY_OF_YEAR) == startCal.get(Calendar.DAY_OF_YEAR)
                         val isEnd = currentCellCal.get(Calendar.YEAR) == endCal.get(Calendar.YEAR) &&
@@ -197,16 +216,21 @@ fun SinglePageDateRangeSelector(
                                         else -> Color.Transparent
                                     }
                                 )
-                                .clickable {
-                                    if (cellMillis < startCal.timeInMillis) {
-                                        // Picked an earlier date, make it new start
-                                        onDateRangeSelected(cellMillis, endCal.timeInMillis)
-                                    } else if (cellMillis == startCal.timeInMillis) {
-                                        // Same day, set 1-day trip
+                                .clickable(enabled = !isPast) {
+                                    if (!isSelectingEnd || startDateMillis != endDateMillis) {
+                                        // Step 1: User taps departure date
                                         onDateRangeSelected(cellMillis, cellMillis)
+                                        isSelectingEnd = true
                                     } else {
-                                        // Later date, set as end date
-                                        onDateRangeSelected(startCal.timeInMillis, cellMillis)
+                                        // Step 2: User taps return date
+                                        if (cellMillis >= startDateMillis) {
+                                            onDateRangeSelected(startDateMillis, cellMillis)
+                                            isSelectingEnd = false
+                                        } else {
+                                            // User tapped earlier date, restart departure date from here
+                                            onDateRangeSelected(cellMillis, cellMillis)
+                                            isSelectingEnd = true
+                                        }
                                     }
                                 },
                             contentAlignment = Alignment.Center
@@ -216,6 +240,7 @@ fun SinglePageDateRangeSelector(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (isStart || isEnd || isInRange) FontWeight.Bold else FontWeight.Normal,
                                 color = when {
+                                    isPast -> TextMuted.copy(alpha = 0.4f)
                                     isStart || isEnd -> Color.White
                                     isInRange -> PrimaryOrange
                                     else -> TextPrimary

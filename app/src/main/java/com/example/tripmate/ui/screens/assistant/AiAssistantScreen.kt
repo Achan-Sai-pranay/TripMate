@@ -16,11 +16,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -36,6 +39,10 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
@@ -48,6 +55,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -399,25 +407,226 @@ private fun AttachedImagePreview(bitmap: Bitmap, onRemove: () -> Unit, modifier:
 
 @Composable
 private fun ChatBubble(message: ChatMessage, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.isFromUser) Arrangement.End else Arrangement.Start
-    ) {
-        Card(
-            modifier = Modifier.widthIn(max = 280.dp),
-            shape = RoundedCornerShape(Dimens.radiusMd),
-            colors = CardDefaults.cardColors(
-                containerColor = if (message.isFromUser) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceContainerLowest
-            ),
-            border = if (message.isFromUser) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceContainerHighest)
+    if (message.isFromUser) {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
         ) {
-            Text(
-                text = message.text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (message.isFromUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(Dimens.md)
-            )
+            Card(
+                modifier = Modifier.widthIn(max = 280.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = com.example.tripmate.ui.theme.PrimaryOrange)
+            ) {
+                Text(
+                    text = message.text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = Dimens.md, vertical = Dimens.sm)
+                )
+            }
+        }
+    } else {
+        // Wanderlog-Style Assistant Card (Structured Cards, Spots & Badges)
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Start
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(0.96f),
+                shape = RoundedCornerShape(Dimens.radiusLg),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = androidx.compose.foundation.BorderStroke(1.dp, com.example.tripmate.ui.theme.SubtleBorder),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(Dimens.md)) {
+                    // Header Brand Pill
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = Dimens.xs)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = com.example.tripmate.ui.theme.PrimaryOrange.copy(alpha = 0.12f),
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = com.example.tripmate.ui.theme.PrimaryOrange,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(Dimens.xs))
+                        Text(
+                            text = "TripMate AI Assistant",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = com.example.tripmate.ui.theme.PrimaryOrange
+                        )
+                    }
+
+                    // Structured Wanderlog Content
+                    WanderlogStructuredText(rawText = message.text)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WanderlogStructuredText(rawText: String) {
+    val lines = remember(rawText) { rawText.lines() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        lines.forEach { line ->
+            val trim = line.trim()
+            if (trim.isBlank()) return@forEach
+
+            when {
+                // Day Section Header (e.g. "Day 1: Lake & Heritage")
+                trim.startsWith("Day ", ignoreCase = true) ||
+                trim.startsWith("### Day", ignoreCase = true) ||
+                trim.startsWith("**Day", ignoreCase = true) -> {
+                    val cleanDayTitle = trim
+                        .removePrefix("###")
+                        .replace("**", "")
+                        .trim()
+
+                    Surface(
+                        shape = RoundedCornerShape(Dimens.radiusSm),
+                        color = Color(0xFFF1F5F9),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Dimens.xs, bottom = 2.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CalendarToday,
+                                contentDescription = null,
+                                tint = com.example.tripmate.ui.theme.PrimaryOrange,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = cleanDayTitle,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = com.example.tripmate.ui.theme.TextPrimary
+                            )
+                        }
+                    }
+                }
+
+                // Spot item (e.g. "• Dal Lake Shikara — 2h • ₹800: Floating market view")
+                trim.startsWith("•") || trim.startsWith("-") || trim.startsWith("*") -> {
+                    val content = trim.trimStart('•', '-', '*', ' ').trim()
+                    val spotName = content
+                        .substringBefore("—")
+                        .substringBefore("-")
+                        .substringBefore(":")
+                        .replace("**", "")
+                        .trim()
+
+                    val detailAndTip = content
+                        .substringAfter("—", "")
+                        .ifBlank { content.substringAfter("-", "").ifBlank { content.substringAfter(":", "") } }
+                        .trim()
+
+                    Card(
+                        shape = RoundedCornerShape(Dimens.radiusSm),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(Dimens.sm),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(com.example.tripmate.ui.theme.PrimaryOrange.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.LocationOn,
+                                    contentDescription = null,
+                                    tint = com.example.tripmate.ui.theme.PrimaryOrange,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(Dimens.xs))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = spotName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = com.example.tripmate.ui.theme.TextPrimary
+                                )
+                                if (detailAndTip.isNotBlank()) {
+                                    Text(
+                                        text = detailAndTip.replace("**", ""),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = com.example.tripmate.ui.theme.TextSecondary,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Pro Tip / Key Insight Highlight
+                trim.startsWith("💡") ||
+                trim.contains("Pro Tip", ignoreCase = true) ||
+                trim.startsWith("Tip:", ignoreCase = true) -> {
+                    Surface(
+                        shape = RoundedCornerShape(Dimens.radiusSm),
+                        color = Color(0xFFFFFBEB),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, bottom = 2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(Dimens.sm),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Lightbulb,
+                                contentDescription = null,
+                                tint = Color(0xFFD97706),
+                                modifier = Modifier.size(16.dp).padding(top = 1.dp)
+                            )
+                            Spacer(modifier = Modifier.width(Dimens.xs))
+                            Text(
+                                text = trim.replace("**", ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF92400E)
+                            )
+                        }
+                    }
+                }
+
+                // Overview or summary text
+                else -> {
+                    Text(
+                        text = trim.replace("**", ""),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = com.example.tripmate.ui.theme.TextPrimary,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                }
+            }
         }
     }
 }

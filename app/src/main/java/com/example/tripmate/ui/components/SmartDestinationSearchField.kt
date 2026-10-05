@@ -30,7 +30,10 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,8 +58,20 @@ fun SmartDestinationSearchField(
     modifier: Modifier = Modifier,
     placeholder: String = "Search destinations (e.g. Goa, Paris)"
 ) {
-    val suggestions = remember(query) {
-        DestinationSearchRepository.search(query)
+    var suggestions by remember { mutableStateOf<List<DestinationSuggestion>>(emptyList()) }
+    var isSearching by remember { mutableStateOf(false) }
+
+    androidx.compose.runtime.LaunchedEffect(query) {
+        val q = query.trim()
+        if (q.isEmpty()) {
+            suggestions = emptyList()
+            isSearching = false
+            return@LaunchedEffect
+        }
+        isSearching = true
+        kotlinx.coroutines.delay(250) // Debounce typing
+        suggestions = DestinationSearchRepository.search(q)
+        isSearching = false
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -104,7 +119,13 @@ fun SmartDestinationSearchField(
                 )
             )
 
-            if (query.isNotEmpty()) {
+            if (isSearching) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp).padding(end = Dimens.xs),
+                    strokeWidth = 2.dp,
+                    color = PrimaryOrange
+                )
+            } else if (query.isNotEmpty()) {
                 IconButton(
                     onClick = { onQueryChange("") },
                     modifier = Modifier.size(32.dp)
