@@ -40,7 +40,7 @@ fun WizardTopBar(
             )
         }
         Text(
-            text = "TripPilot",
+            text = "TripMate",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,

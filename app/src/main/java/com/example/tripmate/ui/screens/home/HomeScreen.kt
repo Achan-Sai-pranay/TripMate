@@ -102,14 +102,17 @@ fun HomeScreen(
             }
 
             item {
-                HomeSearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    onSearchSubmit = {
-                        if (searchQuery.isNotBlank()) onSearchDestination(searchQuery)
-                    },
-                    onFilterClick = { showFilterSheet = true }
-                )
+                Column {
+                    com.example.tripmate.ui.components.SmartDestinationSearchField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onDestinationSelected = { dest ->
+                            searchQuery = "${dest.name}, ${dest.country}"
+                            onSearchDestination(searchQuery)
+                        },
+                        placeholder = "Where to? (e.g. Goa, Paris, Manali)"
+                    )
+                }
             }
 
             item {

@@ -253,6 +253,15 @@ fun AiAssistantScreen(
                 )
             }
 
+            // Bottom Map Route popup when itinerary/destinations are discussed
+            val mapRoute by viewModel.activeMapRoute.collectAsState()
+            mapRoute?.let { route ->
+                com.example.tripmate.ui.components.AssistantBottomMapRoute(
+                    route = route,
+                    onDismiss = { viewModel.dismissMap() }
+                )
+            }
+
             AssistantInputBar(
                 value = inputText,
                 onValueChange = { inputText = it },
@@ -485,7 +494,7 @@ private fun AssistantInputBar(
             value = value,
             onValueChange = onValueChange,
             modifier = Modifier.weight(1f),
-            placeholder = { Text("Ask TripPilot anything...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) },
+            placeholder = { Text("Ask TripMate anything (e.g. 3 day Goa itinerary)...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) },
             singleLine = true,
             textStyle = MaterialTheme.typography.bodyMedium,
             colors = OutlinedTextFieldDefaults.colors(
