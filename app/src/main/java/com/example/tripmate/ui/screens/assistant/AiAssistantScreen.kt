@@ -148,7 +148,7 @@ fun AiAssistantScreen(
         }
         try {
             voiceLauncher.launch(intent)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Toast.makeText(context, "Voice input isn't available on this device", Toast.LENGTH_SHORT).show()
         }
     }
@@ -209,7 +209,7 @@ fun AiAssistantScreen(
                 }
             )
         }
-    ) { innerPadding ->
+    ) { innerPadding: PaddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -237,7 +237,7 @@ fun AiAssistantScreen(
                             modifier = Modifier.padding(bottom = Dimens.xs)
                         )
                     }
-                    itemsIndexed(suggestions) { _, suggestion ->
+                    itemsIndexed(suggestions) { _: Int, suggestion: AssistantSuggestion ->
                         SuggestionCard(
                             suggestion = suggestion,
                             onClick = { viewModel.sendMessage(suggestion.title) },
@@ -245,7 +245,7 @@ fun AiAssistantScreen(
                         )
                     }
                 } else {
-                    itemsIndexed(messages) { _, message ->
+                    itemsIndexed(messages) { _: Int, message: ChatMessage ->
                         ChatBubble(message = message)
                     }
                     if (isLoading) {

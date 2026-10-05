@@ -73,56 +73,62 @@ object DestinationSearchRepository {
             return@withContext offlineDestinations.take(6)
         }
 
+        val instantOffline = searchOffline(q)
+
         try {
             val encodedQuery = URLEncoder.encode(q, StandardCharsets.UTF_8.toString())
-            val url = "https://photon.komoot.io/api/?q=$encodedQuery&limit=10"
+            val url = "https://nominatim.openstreetmap.org/search?q=$encodedQuery&format=json&limit=8&addressdetails=1"
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", "TripMate-Android/1.0")
+                .header("User-Agent", "TripMateApp/1.0 (Android; Contact: support@tripmate.app)")
                 .build()
 
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful) {
                 val jsonString = response.body?.string().orEmpty()
-                val parsed = parsePhotonResults(jsonString, q)
+                val parsed = parseNominatimResults(jsonString)
                 if (parsed.isNotEmpty()) {
-                    return@withContext parsed
+                    // Merge parsed online results with top offline matches, prioritizing online
+                    val combined = mutableListOf<DestinationSuggestion>()
+                    val seen = mutableSetOf<String>()
+                    for (item in parsed) {
+                        if (seen.add(item.name.lowercase())) {
+                            combined.add(item)
+                        }
+                    }
+                    for (item in instantOffline) {
+                        if (seen.add(item.name.lowercase())) {
+                            combined.add(item)
+                        }
+                    }
+                    return@withContext combined.take(8)
                 }
             }
         } catch (_: Exception) {
             // Network failure or timeout: silently fall back to offline dataset
         }
 
-        searchOffline(q)
+        instantOffline
     }
 
-    private fun parsePhotonResults(jsonString: String, rawQuery: String): List<DestinationSuggestion> {
+    private fun parseNominatimResults(jsonString: String): List<DestinationSuggestion> {
         val results = mutableListOf<DestinationSuggestion>()
         val seenNames = mutableSetOf<String>()
 
         try {
-            val root = JSONObject(jsonString)
-            val features = root.optJSONArray("features") ?: return emptyList()
-
-            for (i in 0 until features.length()) {
-                val feature = features.optJSONObject(i) ?: continue
-                val properties = feature.optJSONObject("properties") ?: continue
-
-                val name = properties.optString("name", "").trim()
+            val array = org.json.JSONArray(jsonString)
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                val name = obj.optString("name", "").trim()
                 if (name.isEmpty()) continue
 
-                val state = properties.optString("state", "")
-                val county = properties.optString("county", "")
-                val city = properties.optString("city", "")
-                val country = properties.optString("country", "")
+                val address = obj.optJSONObject("address")
+                val state = address?.optString("state", "")
+                    ?: address?.optString("region", "")
+                    ?: ""
+                val country = address?.optString("country", "") ?: ""
 
-                val region = when {
-                    state.isNotEmpty() -> state
-                    county.isNotEmpty() -> county
-                    city.isNotEmpty() -> city
-                    else -> country
-                }
-
+                val region = if (state.isNotEmpty()) state else country
                 val key = "${name.lowercase()}_${country.lowercase()}"
                 if (seenNames.add(key)) {
                     val handle = "@" + name.lowercase().replace(Regex("[^a-z0-9]"), "")
@@ -132,7 +138,7 @@ object DestinationSearchRepository {
                             region = region,
                             country = if (country.isNotEmpty()) country else region,
                             handle = handle,
-                            popularTags = listOf("Popular Destination", "Verified Place")
+                            popularTags = listOf("Verified Place", "OpenStreetMap")
                         )
                     )
                 }
