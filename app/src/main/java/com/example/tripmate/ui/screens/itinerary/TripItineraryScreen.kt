@@ -1,21 +1,28 @@
 package com.example.tripmate.ui.screens.itinerary
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
-import androidx.compose.material.icons.filled.Castle
-import androidx.compose.material.icons.filled.LocalDining
-import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -24,10 +31,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -37,80 +44,36 @@ import com.example.tripmate.model.ItineraryTab
 import com.example.tripmate.model.TripSummary
 import com.example.tripmate.ui.components.BottomNavTab
 import com.example.tripmate.ui.components.TripPilotBottomNav
+import com.example.tripmate.ui.shared.TripPlanViewModel
 import com.example.tripmate.ui.theme.Dimens
-
-private const val GOLCONDA_FORT_IMAGE_URL =
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuDp4HfPx7-KGD0w03zCbM9eUkmTV50mBbUiWwslqiVF8E1P02SzYNpXJALKPj6ZUhxk1jk3LlXuKMx7eqB4AfL54uvSZpyAraZsjxry42wJmVLxPHiPqCn05k4Y47-zeeF-A7BulAJqNV-Hfedn_MZaJlyvL274WBp9WTmqmBiq-A06hMeIvZqDZb4BWdyWA3J5jI-cxkHiJSP_Hmy8p6h3WMQlE7roCDhsAW8O5VRKHv6ynS1ONRNrUw"
 
 @Composable
 fun TripItineraryScreen(
+    tripPlanViewModel: TripPlanViewModel,
     onExploreClick: () -> Unit,
+    onPlanNewTripClick: () -> Unit,
     onAssistantClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onOpenExpenses: (tripId: String) -> Unit,
     modifier: Modifier = Modifier,
     aiViewModel: ItineraryAiViewModel = viewModel()
 ) {
+    val tripPlan by tripPlanViewModel.tripPlan.collectAsState()
+    val isGenerating by tripPlanViewModel.isGenerating.collectAsState()
+    val planError by tripPlanViewModel.errorMessage.collectAsState()
+    val tripRequest by tripPlanViewModel.request.collectAsState()
+
     val isReplanning by aiViewModel.isReplanning.collectAsState()
     val replacingItemKey by aiViewModel.replacingItemKey.collectAsState()
-    val errorMessage by aiViewModel.errorMessage.collectAsState()
+    val aiError by aiViewModel.errorMessage.collectAsState()
+
     val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(errorMessage) {
-        errorMessage?.let {
-            snackbarHostState.showSnackbar(it)
-            aiViewModel.dismissError()
-        }
-    }
-
-    val tripSummary = remember {
-        TripSummary(
-            destination = "Hyderabad Getaway",
-            dateRange = "Oct 12 - Oct 15",
-            travelerCount = 3,
-            healthScore = 87
-        )
-    }
+    LaunchedEffect(planError) { planError?.let { snackbarHostState.showSnackbar(it); tripPlanViewModel.dismissError() } }
+    LaunchedEffect(aiError) { aiError?.let { snackbarHostState.showSnackbar(it); aiViewModel.dismissError() } }
 
     var selectedViewTab by remember { mutableStateOf(ItineraryTab.ITINERARY) }
-
-    val days = remember {
-        mutableStateListOf(
-            ItineraryDay(
-                dayNumber = 1,
-                dateLabel = "Oct 12",
-                items = listOf(
-                    ItineraryItem(
-                        time = "09:00 AM",
-                        title = "Breakfast at Local Cafe",
-                        durationLabel = "1h",
-                        costLabel = "\u20B9300",
-                        whyThis = "Highly rated traditional breakfast, perfectly on route to your first attraction.",
-                        icon = Icons.Filled.Restaurant
-                    ),
-                    ItineraryItem(
-                        time = "10:30 AM",
-                        title = "Golconda Fort",
-                        durationLabel = "2.5h",
-                        costLabel = "\u20B9200",
-                        whyThis = "Matches History interest. Early visit avoids peak afternoon heat and crowds.",
-                        icon = Icons.Filled.Castle,
-                        imageUrl = GOLCONDA_FORT_IMAGE_URL
-                    ),
-                    ItineraryItem(
-                        time = "01:00 PM",
-                        title = "Biryani Lunch",
-                        durationLabel = "1h",
-                        costLabel = "\u20B9600",
-                        whyThis = "Iconic local cuisine. Located within 15 mins of Golconda Fort for easy transit.",
-                        icon = Icons.Filled.LocalDining
-                    )
-                )
-            )
-        )
-    }
-
     var currentDayIndex by remember { mutableStateOf(0) }
-    val currentDay = days.getOrNull(currentDayIndex) ?: ItineraryDay(1, "Oct 12", emptyList())
+    var editingItem by remember { mutableStateOf<Pair<Int, ItineraryItem>?>(null) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -130,103 +93,245 @@ fun TripItineraryScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = {
-                    aiViewModel.replanDay(
-                        destination = tripSummary.destination,
-                        dayLabel = "Day ${currentDay.dayNumber} (${currentDay.dateLabel})",
-                        currentItems = currentDay.items
-                    ) { newItems ->
-                        if (currentDayIndex in days.indices) {
-                            days[currentDayIndex] = currentDay.copy(items = newItems)
+            val plan = tripPlan
+            val currentDay = plan?.days?.getOrNull(currentDayIndex)
+            if (plan != null && currentDay != null) {
+                ExtendedFloatingActionButton(
+                    onClick = {
+                        aiViewModel.replanDay(
+                            destination = plan.destination,
+                            dayLabel = "Day ${currentDay.dayNumber} (${currentDay.dateLabel})",
+                            currentItems = currentDay.items
+                        ) { newItems ->
+                            tripPlanViewModel.updateDay(currentDayIndex, newItems)
                         }
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ) {
+                    if (isReplanning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(imageVector = Icons.Filled.AutoFixHigh, contentDescription = null)
                     }
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                if (isReplanning) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
+                    Text(
+                        text = if (isReplanning) "Replanning…" else "Replan",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(start = Dimens.xs)
                     )
-                } else {
-                    Icon(imageVector = Icons.Filled.AutoFixHigh, contentDescription = null)
                 }
-                Text(
-                    text = if (isReplanning) "Replanning…" else "Replan",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(start = Dimens.xs)
-                )
             }
         }
     ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = Dimens.marginMobile,
-                end = Dimens.marginMobile,
-                top = Dimens.lg,
-                bottom = innerPadding.calculateBottomPadding() + Dimens.xxl
-            ),
-            verticalArrangement = Arrangement.spacedBy(Dimens.lg)
-        ) {
-            item { TripSummaryCard(trip = tripSummary) }
+        when {
+            isGenerating -> GeneratingTripState(modifier = Modifier.padding(innerPadding))
+            tripPlan == null -> EmptyTripState(
+                onPlanTripClick = onPlanNewTripClick,
+                modifier = Modifier.padding(innerPadding)
+            )
+            else -> {
+                val plan = tripPlan!!
+                val currentDay = plan.days.getOrNull(currentDayIndex) ?: plan.days.first()
 
-            item {
-                ItineraryViewTabs(
-                    selectedTab = selectedViewTab,
-                    onTabSelected = { selectedViewTab = it }
-                )
-            }
+                val heroImages = remember(plan) {
+                    plan.days.flatMap { it.items }.mapNotNull { it.imageUrl }.distinct()
+                }
 
-            item {
-                DaySelector(
-                    dayNumber = currentDay.dayNumber,
-                    dateLabel = currentDay.dateLabel,
-                    onPreviousDay = {
-                        if (currentDayIndex > 0) currentDayIndex--
-                    },
-                    onNextDay = {
-                        if (currentDayIndex < days.lastIndex) currentDayIndex++
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = Dimens.marginMobile,
+                        end = Dimens.marginMobile,
+                        top = innerPadding.calculateTopPadding() + Dimens.md,
+                        bottom = innerPadding.calculateBottomPadding() + Dimens.xxl
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.lg)
+                ) {
+                    item {
+                        TripSummaryCard(
+                            trip = TripSummary(
+                                destination = plan.destination,
+                                dateRange = plan.dateRangeLabel,
+                                travelerCount = plan.travelerCount,
+                                healthScore = plan.healthScore
+                            ),
+                            heroImages = heroImages
+                        )
                     }
-                )
-            }
-
-            itemsIndexed(currentDay.items) { index, item ->
-                val isReplacing = (item.time + item.title) == replacingItemKey
-                TimelineItemRow(
-                    item = item,
-                    isLastItem = index == currentDay.items.lastIndex,
-                    isReplacing = isReplacing,
-                    onEditClick = { /* wired up in the features pass */ },
-                    onReplaceClick = {
-                        aiViewModel.replaceItem(
-                            destination = tripSummary.destination,
-                            item = item
-                        ) { newItem ->
-                            val updatedItems = currentDay.items.toMutableList().also { it[index] = newItem }
-                            if (currentDayIndex in days.indices) {
-                                days[currentDayIndex] = currentDay.copy(items = updatedItems)
+                    // Group expenses button — only shown when a Supabase trip row exists
+                    plan.supabaseTripId?.let { tripId ->
+                        item {
+                            OutlinedButton(
+                                onClick = { onOpenExpenses(tripId) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(Dimens.radiusFull)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Groups,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    " Manage Group Expenses",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(start = Dimens.xs)
+                                )
                             }
                         }
-                    },
-                    onDuplicateClick = {
-                        val duplicate = item.copy()
-                        val updatedItems = currentDay.items.toMutableList()
-                        updatedItems.add(index + 1, duplicate)
-                        val updatedDay = currentDay.copy(items = updatedItems)
-                        days[currentDayIndex] = updatedDay
-                    },
-                    onDeleteClick = {
-                        val updatedItems = currentDay.items.toMutableList()
-                        updatedItems.removeAt(index)
-                        val updatedDay = currentDay.copy(items = updatedItems)
-                        days[currentDayIndex] = updatedDay
                     }
-                )
+                    item {
+                        ItineraryViewTabs(
+                            selectedTab = selectedViewTab,
+                            onTabSelected = { selectedViewTab = it }
+                        )
+                    }
+                    item {
+                        DaySelector(
+                            dayNumber = currentDay.dayNumber,
+                            dateLabel = currentDay.dateLabel,
+                            onPreviousDay = { if (currentDayIndex > 0) currentDayIndex-- },
+                            onNextDay = { if (currentDayIndex < plan.days.lastIndex) currentDayIndex++ }
+                        )
+                    }
+                    when (selectedViewTab) {
+                        ItineraryTab.ITINERARY -> {
+                            itemsIndexed(currentDay.items, key = { _, item -> item.time + item.title }) { index, item ->
+                                val isReplacing = (item.time + item.title) == replacingItemKey
+                                TimelineItemRow(
+                                    item = item,
+                                    isLastItem = index == currentDay.items.lastIndex,
+                                    isReplacing = isReplacing,
+                                    onEditClick = { editingItem = index to item },
+                                    onReplaceClick = {
+                                        aiViewModel.replaceItem(
+                                            destination = plan.destination,
+                                            item = item
+                                        ) { newItem ->
+                                            val newItems = currentDay.items.toMutableList().also { it[index] = newItem }
+                                            tripPlanViewModel.updateDay(currentDayIndex, newItems)
+                                        }
+                                    },
+                                    onDuplicateClick = {
+                                        val duplicate = item.copy()
+                                        val newItems = currentDay.items.toMutableList().apply { add(index + 1, duplicate) }
+                                        tripPlanViewModel.updateDay(currentDayIndex, newItems)
+                                    },
+                                    onDeleteClick = {
+                                        val newItems = currentDay.items.toMutableList().apply { removeAt(index) }
+                                        tripPlanViewModel.updateDay(currentDayIndex, newItems)
+                                    }
+                                )
+                            }
+                        }
+                        ItineraryTab.BUDGET -> {
+                            item {
+                                BudgetBreakdownView(
+                                    days = plan.days,
+                                    totalBudget = tripRequest.budget,
+                                    modifier = Modifier.padding(top = Dimens.sm)
+                                )
+                            }
+                        }
+                        ItineraryTab.MAP -> {
+                            item {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().height(240.dp).padding(top = Dimens.sm),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "Map view isn't available yet — needs Google Maps integration.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    item {
+                        DaySelector(
+                            dayNumber = currentDay.dayNumber,
+                            dateLabel = currentDay.dateLabel,
+                            onPreviousDay = { if (currentDayIndex > 0) currentDayIndex-- },
+                            onNextDay = { if (currentDayIndex < plan.days.lastIndex) currentDayIndex++ },
+                            modifier = Modifier.padding(top = Dimens.md, bottom = 80.dp) // extra bottom padding for FAB/nav
+                        )
+                    }
+                }
+                
+                editingItem?.let { (index, item) ->
+                    EditItineraryItemDialog(
+                        item = item,
+                        onDismiss = { editingItem = null },
+                        onSave = { updated ->
+                            val newItems = currentDay.items.toMutableList().also { it[index] = updated }
+                            tripPlanViewModel.updateDay(currentDayIndex, newItems)
+                            editingItem = null
+                        }
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun GeneratingTripState(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = Dimens.marginMobile, vertical = Dimens.lg)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState())
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = Dimens.md)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "TripPilot AI is curating your personalized itinerary…",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = Dimens.sm)
+            )
+        }
+        com.example.tripmate.ui.components.ItinerarySkeletonLoader(count = 5)
+    }
+}
+
+@Composable
+private fun EmptyTripState(onPlanTripClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxSize().padding(Dimens.xl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "No trip planned yet",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = "Start from Explore to plan your first AI itinerary.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.padding(top = Dimens.xs)
+        )
+        Button(
+            onClick = onPlanTripClick,
+            modifier = Modifier.padding(top = Dimens.lg)
+        ) {
+            Text("Plan a Trip")
         }
     }
 }

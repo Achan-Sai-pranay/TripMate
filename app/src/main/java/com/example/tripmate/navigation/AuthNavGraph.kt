@@ -6,6 +6,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.tripmate.ui.screens.auth.LoginScreen
 import com.example.tripmate.ui.screens.auth.SignUpScreen
+import com.example.tripmate.ui.screens.auth.TravelVibeScreen
 
 @Composable
 fun AuthNavGraph(
@@ -21,7 +22,21 @@ fun AuthNavGraph(
         composable(Screen.SignUp.route) {
             SignUpScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onInstantSignedIn = onSignedIn
+                onInstantSignedIn = {
+                    navController.navigate(Screen.TravelVibe.route) {
+                        popUpTo(Screen.SignUp.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable(Screen.TravelVibe.route) {
+            TravelVibeScreen(
+                onContinue = { vibes ->
+                    onSignedIn()
+                },
+                onSkip = {
+                    onSignedIn()
+                }
             )
         }
     }
