@@ -130,7 +130,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 _tripPlan.value = finalPlan
                 repository.save(finalPlan)
                 historyRepository.append(finalPlan)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 _errorMessage.value = e.message ?: "Couldn't generate your trip — please try again."
             } finally {
                 _isGenerating.value = false
