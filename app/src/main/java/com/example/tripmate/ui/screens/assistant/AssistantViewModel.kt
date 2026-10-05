@@ -7,6 +7,7 @@ import com.example.tripmate.data.GeminiApiClient
 import com.example.tripmate.model.AssistantItineraryPin
 import com.example.tripmate.model.AssistantMapRoute
 import com.example.tripmate.model.ChatMessage
+import com.example.tripmate.util.GeocodingHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,25 +15,24 @@ import kotlinx.coroutines.launch
 import android.graphics.Bitmap
 
 private val SYSTEM_PROMPT = """
-You are the Wanderlog-style AI Travel Assistant in TripMate.
-You provide direct, concise, and highly structured travel itineraries and recommendations.
+You are the AI Travel Assistant in TripMate (styled like Wanderlog and top itinerary apps).
+You provide direct, highly structured travel recommendations and itineraries.
 
-STRICT RULES:
-1. NEVER output conversational filler or questionnaires ("Whenever you're ready, let me know...", "Give me the word and I'll whip up...").
-2. Answer immediately with curated recommendations, assuming standard popular traveler preferences if details are unspecified.
-3. Keep the total response under 160 words so it displays cleanly as structured mobile cards without large walls of text.
-4. Structure the response strictly in this format:
+FORMAT RULES:
+1. Always start with a brief 1-2 sentence overview.
+2. Group recommendations by Day headers:
+   Day 1: [Theme Title]
+   • [Spot Name] — [Duration] • [Cost]: [Insider tip]
+   • [Spot Name] — [Duration] • [Cost]: [Insider tip]
 
-Brief 1-sentence overview.
+   Day 2: [Theme Title]
+   • [Spot Name] — [Duration] • [Cost]: [Insider tip]
 
-Day 1: [Theme Title]
-• [Spot Name] — [Duration] • [Cost]: [One concise insider tip]
-• [Spot Name] — [Duration] • [Cost]: [One concise insider tip]
+3. Include a final tip:
+   💡 Pro Tip: [1 short insider tip]
 
-Day 2: [Theme Title]
-• [Spot Name] — [Duration] • [Cost]: [One concise insider tip]
-
-💡 Pro Tip: [1 short sentence tip]
+4. When recommending places for specific days (e.g., alternate places for Day 3), mention the Day number explicitly and give 2-4 distinct spots with descriptions.
+5. Keep it punchy, organized, and avoid conversational fluff.
 """.trimIndent()
 
 class AssistantViewModel : ViewModel() {
@@ -46,9 +46,18 @@ class AssistantViewModel : ViewModel() {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    // Interactive bottom map route matching Wanderlog style (chat above, map stops below)
+    // Interactive bottom map route with real, pinpointed locations
     private val _activeMapRoute = MutableStateFlow<AssistantMapRoute?>(null)
     val activeMapRoute: StateFlow<AssistantMapRoute?> = _activeMapRoute.asStateFlow()
+
+    // Preserved active destination across conversational turns
+    private var activeDestination: String = "Goa"
+
+    fun setInitialDestination(destination: String) {
+        if (destination.isNotBlank()) {
+            activeDestination = destination
+        }
+    }
 
     fun dismissMap() {
         _activeMapRoute.value = null
@@ -63,13 +72,19 @@ class AssistantViewModel : ViewModel() {
             return
         }
 
+        // Detect or preserve destination
+        val detected = detectDestinationFromText(text)
+        if (detected != null) {
+            activeDestination = detected
+        }
+
         val updatedConversation = _messages.value + ChatMessage(text = text, isFromUser = true)
         _messages.value = updatedConversation
         _isLoading.value = true
         _errorMessage.value = null
 
-        // Detect if user asked for an itinerary to extract map pins
-        detectAndPrepareMapPins(text)
+        // Prepare map pins immediately for smooth responsiveness
+        detectAndPrepareMapPins(text, activeDestination)
 
         viewModelScope.launch {
             try {
@@ -79,7 +94,7 @@ class AssistantViewModel : ViewModel() {
                     conversation = updatedConversation
                 )
                 _messages.value = _messages.value + ChatMessage(text = reply, isFromUser = false)
-                extractPinsFromReply(reply, text)
+                extractPinsFromReply(reply, text, activeDestination)
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Something went wrong — please try again."
             } finally {
@@ -98,12 +113,17 @@ class AssistantViewModel : ViewModel() {
         }
 
         val messageText = text.ifBlank { "What can you tell me about this place?" }
+        val detected = detectDestinationFromText(messageText)
+        if (detected != null) {
+            activeDestination = detected
+        }
+
         val updatedConversation = _messages.value + ChatMessage(text = messageText, isFromUser = true)
         _messages.value = updatedConversation
         _isLoading.value = true
         _errorMessage.value = null
 
-        detectAndPrepareMapPins(messageText)
+        detectAndPrepareMapPins(messageText, activeDestination)
 
         viewModelScope.launch {
             try {
@@ -114,7 +134,7 @@ class AssistantViewModel : ViewModel() {
                     image = image
                 )
                 _messages.value = _messages.value + ChatMessage(text = reply, isFromUser = false)
-                extractPinsFromReply(reply, messageText)
+                extractPinsFromReply(reply, messageText, activeDestination)
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Something went wrong — please try again."
             } finally {
@@ -126,9 +146,8 @@ class AssistantViewModel : ViewModel() {
     private fun detectDestinationFromText(text: String): String? {
         val lower = text.lowercase()
         return when {
-            lower.contains("kashmir") -> "Kashmir"
-            lower.contains("srinagar") -> "Srinagar"
             lower.contains("goa") -> "Goa"
+            lower.contains("kashmir") || lower.contains("srinagar") -> "Kashmir"
             lower.contains("paris") -> "Paris"
             lower.contains("manali") -> "Manali"
             lower.contains("hyderabad") -> "Hyderabad"
@@ -147,63 +166,96 @@ class AssistantViewModel : ViewModel() {
         }
     }
 
-    private fun detectAndPrepareMapPins(query: String) {
-        val dest = detectDestinationFromText(query) ?: return
+    private fun detectAndPrepareMapPins(query: String, destination: String) {
+        val lower = query.lowercase()
+        val isAlternatePlaces = lower.contains("alternate") || lower.contains("alternative") || lower.contains("options")
+        val targetDay = when {
+            lower.contains("day 1") -> 1
+            lower.contains("day 2") -> 2
+            lower.contains("day 3") -> 3
+            lower.contains("day 4") -> 4
+            else -> 1
+        }
 
-        val defaultPins = when (dest) {
-            "Kashmir", "Srinagar" -> listOf(
-                AssistantItineraryPin("Dal Lake & Shikara Ride", 1, "Dal Lake, Srinagar"),
-                AssistantItineraryPin("Shalimar Bagh Mughal Garden", 1, "Boulevard Rd, Srinagar"),
-                AssistantItineraryPin("Gulmarg Gondola & Snow Peak", 2, "Gulmarg, Kashmir"),
-                AssistantItineraryPin("Betaab Valley & Lidder River", 3, "Pahalgam, Kashmir")
+        val rawPins = if (isAlternatePlaces && destination.equals("Goa", ignoreCase = true)) {
+            listOf(
+                Triple("Jardín Botánico", targetDay, "Campal, Panaji"),
+                Triple("Local Art District", targetDay, "Sunaparanta, Panaji"),
+                Triple("Miramar Beach & Sunset", targetDay, "Miramar, Panaji"),
+                Triple("Fontainhas Latin Quarter", targetDay, "Panaji Heritage Walk")
             )
-            "Goa" -> listOf(
-                AssistantItineraryPin("Fort Aguada & Lighthouse", 1, "Candolim, North Goa"),
-                AssistantItineraryPin("Anjuna Beach & Flea Market", 1, "Anjuna, North Goa"),
-                AssistantItineraryPin("Basilica of Bom Jesus", 2, "Old Goa"),
-                AssistantItineraryPin("Fontainhas Latin Quarter", 2, "Panaji"),
-                AssistantItineraryPin("Palolem Beach & Shacks", 3, "Canacona, South Goa")
-            )
-            "Paris" -> listOf(
-                AssistantItineraryPin("Eiffel Tower", 1, "Champ de Mars"),
-                AssistantItineraryPin("Louvre Museum", 1, "Rue de Rivoli"),
-                AssistantItineraryPin("Notre-Dame Cathedral", 2, "Île de la Cité"),
-                AssistantItineraryPin("Montmartre & Sacré-Cœur", 3, "18th arrondissement")
-            )
-            "Kyoto" -> listOf(
-                AssistantItineraryPin("Fushimi Inari Taisha", 1, "Fushimi Ward"),
-                AssistantItineraryPin("Kinkaku-ji Golden Pavilion", 1, "Kita Ward"),
-                AssistantItineraryPin("Arashiyama Bamboo Grove", 2, "Ukyo Ward"),
-                AssistantItineraryPin("Gion Geisha District", 2, "Higashiyama Ward")
-            )
-            else -> listOf(
-                AssistantItineraryPin("Historic Center", 1, "$dest Downtown"),
-                AssistantItineraryPin("Scenic Viewpoint", 2, "$dest Overlook"),
-                AssistantItineraryPin("Local Market & Food Walk", 3, "$dest Bazaars")
+        } else {
+            when (destination.lowercase()) {
+                "goa" -> listOf(
+                    Triple("Fort Aguada & Lighthouse", 1, "Candolim, North Goa"),
+                    Triple("Candolim Beach", 1, "Candolim, North Goa"),
+                    Triple("Anjuna Beach & Flea Market", 1, "Anjuna, North Goa"),
+                    Triple("Basilica of Bom Jesus", 2, "Old Goa"),
+                    Triple("Fontainhas Latin Quarter", 2, "Panaji"),
+                    Triple("Palolem Beach & Shacks", 3, "Canacona, South Goa")
+                )
+                "kashmir", "srinagar" -> listOf(
+                    Triple("Dal Lake & Shikara Ride", 1, "Dal Lake, Srinagar"),
+                    Triple("Shalimar Bagh Mughal Garden", 1, "Boulevard Rd, Srinagar"),
+                    Triple("Gulmarg Gondola & Snow Peak", 2, "Gulmarg, Kashmir"),
+                    Triple("Betaab Valley & Lidder River", 3, "Pahalgam, Kashmir")
+                )
+                "paris" -> listOf(
+                    Triple("Eiffel Tower", 1, "Champ de Mars"),
+                    Triple("Louvre Museum", 1, "Rue de Rivoli"),
+                    Triple("Notre-Dame Cathedral", 2, "Île de la Cité"),
+                    Triple("Montmartre & Sacré-Cœur", 3, "18th arrondissement")
+                )
+                "kyoto" -> listOf(
+                    Triple("Fushimi Inari Taisha", 1, "Fushimi Ward"),
+                    Triple("Kinkaku-ji Golden Pavilion", 1, "Kita Ward"),
+                    Triple("Arashiyama Bamboo Grove", 2, "Ukyo Ward"),
+                    Triple("Gion Geisha District", 2, "Higashiyama Ward")
+                )
+                else -> listOf(
+                    Triple("Historic Center", 1, "$destination Downtown"),
+                    Triple("Scenic Viewpoint", 2, "$destination Overlook"),
+                    Triple("Local Market & Food Walk", 3, "$destination Bazaars")
+                )
+            }
+        }
+
+        val pins = rawPins.mapIndexed { idx, (title, day, loc) ->
+            GeocodingHelper.createPin(
+                title = title,
+                dayNumber = day,
+                location = loc,
+                destination = destination,
+                index = idx
             )
         }
+
+        val title = if (isAlternatePlaces) {
+            "${pins.size} Alternate Stops for Day $targetDay in $destination"
+        } else {
+            "${pins.size} Curated Stops in $destination"
+        }
+
         _activeMapRoute.value = AssistantMapRoute(
-            destination = dest,
-            itineraryTitle = "$dest Itinerary Route",
-            pins = defaultPins
+            destination = destination,
+            itineraryTitle = title,
+            pins = pins
         )
     }
 
-    private fun extractPinsFromReply(reply: String, query: String) {
-        val dest = _activeMapRoute.value?.destination
-            ?: detectDestinationFromText(query)
-            ?: detectDestinationFromText(reply)
-            ?: "Travel"
-
+    private fun extractPinsFromReply(reply: String, query: String, destination: String) {
         val extracted = mutableListOf<AssistantItineraryPin>()
         var currentDay = 1
+        var itemIndex = 0
 
         reply.lines().forEach { line ->
             val trim = line.trim()
-            if (trim.contains("Day 1", ignoreCase = true)) currentDay = 1
-            else if (trim.contains("Day 2", ignoreCase = true)) currentDay = 2
-            else if (trim.contains("Day 3", ignoreCase = true)) currentDay = 3
-            else if (trim.contains("Day 4", ignoreCase = true)) currentDay = 4
+            when {
+                trim.contains("Day 1", ignoreCase = true) -> currentDay = 1
+                trim.contains("Day 2", ignoreCase = true) -> currentDay = 2
+                trim.contains("Day 3", ignoreCase = true) -> currentDay = 3
+                trim.contains("Day 4", ignoreCase = true) -> currentDay = 4
+            }
 
             if (trim.startsWith("-") || trim.startsWith("•") || trim.startsWith("*")) {
                 val cleanLine = trim.trimStart('-', '•', '*', ' ')
@@ -211,19 +263,26 @@ class AssistantViewModel : ViewModel() {
                     .substringBefore("—")
                     .substringBefore("-")
                     .substringBefore(":")
-                    .replace(Regex("\\[|\\]|\\*\\*|\\*"), "")
+                    .replace(Regex("[\\[\\]*]"), "")
                     .trim()
 
                 if (spotName.length in 3..40 && !spotName.contains("http") && !spotName.startsWith("Pro Tip")) {
-                    extracted.add(AssistantItineraryPin(spotName, currentDay, "$spotName, $dest"))
+                    val pin = GeocodingHelper.createPin(
+                        title = spotName,
+                        dayNumber = currentDay,
+                        location = "$spotName, $destination",
+                        destination = destination,
+                        index = itemIndex++
+                    )
+                    extracted.add(pin)
                 }
             }
         }
 
         if (extracted.size >= 2) {
             _activeMapRoute.value = AssistantMapRoute(
-                destination = dest,
-                itineraryTitle = "${extracted.size} Curated Stops in $dest",
+                destination = destination,
+                itineraryTitle = "${extracted.size} Curated Stops in $destination",
                 pins = extracted.take(8)
             )
         }
@@ -233,3 +292,4 @@ class AssistantViewModel : ViewModel() {
         _errorMessage.value = null
     }
 }
+

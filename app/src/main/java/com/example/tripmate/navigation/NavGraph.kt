@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -220,7 +221,9 @@ fun TripPilotNavGraph(
             popEnterTransition = { fadeIn(tween(200)) },
             popExitTransition = { fadeOut(tween(200)) }
         ) {
+            val destination = tripPlanViewModel.tripPlan.collectAsState().value?.destination.orEmpty()
             AiAssistantScreen(
+                initialDestination = destination,
                 onExploreClick = { navController.navigateToTab(Screen.Home.route) },
                 onMyTripsClick = { navController.navigateToTab(Screen.TripItinerary.route) },
                 onProfileClick = { navController.navigateToTab(Screen.Profile.route) }
