@@ -60,12 +60,13 @@ data class TripBasics(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateTripBasicsScreen(
+    initialDestination: String = "",
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
     onNextClick: (TripBasics) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var destination by remember { mutableStateOf("") }
+    var destination by remember { mutableStateOf(initialDestination) }
 
     val dateFormat = remember { SimpleDateFormat("dd-MM-yyyy", Locale.getDefault()) }
     val today = remember { Calendar.getInstance().timeInMillis }
@@ -138,11 +139,12 @@ fun CreateTripBasicsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = Dimens.marginMobile),
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = Dimens.marginMobile)
+                .padding(top = Dimens.md),
+            verticalArrangement = Arrangement.Top
         ) {
             Column(modifier = Modifier.padding(bottom = Dimens.xl)) {
-                StepProgressBar(currentStep = 1, totalSteps = 6, modifier = Modifier.padding(bottom = Dimens.md))
+                StepProgressBar(currentStep = 1, totalSteps = 3, modifier = Modifier.padding(bottom = Dimens.md))
                 Text(
                     text = "Start your next adventure",
                     style = MaterialTheme.typography.headlineMedium,

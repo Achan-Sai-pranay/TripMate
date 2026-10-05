@@ -238,17 +238,27 @@ fun TripItineraryScreen(
                         }
                         ItineraryTab.MAP -> {
                             item {
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().height(240.dp).padding(top = Dimens.sm),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        "Map view isn't available yet — needs Google Maps integration.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                    )
-                                }
+                                InteractiveMapTab(
+                                    destination = plan.destination,
+                                    day = currentDay,
+                                    modifier = Modifier.padding(top = Dimens.sm)
+                                )
+                            }
+                        }
+                        ItineraryTab.STAYS -> {
+                            item {
+                                StaysSectionView(
+                                    stays = plan.stays,
+                                    modifier = Modifier.padding(top = Dimens.sm)
+                                )
+                            }
+                        }
+                        ItineraryTab.DINING -> {
+                            item {
+                                DiningSectionView(
+                                    dining = plan.dining,
+                                    modifier = Modifier.padding(top = Dimens.sm)
+                                )
                             }
                         }
                     }

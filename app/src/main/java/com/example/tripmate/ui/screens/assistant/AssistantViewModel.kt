@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.graphics.Bitmap
 
 private val SYSTEM_PROMPT = """
 You are TripPilot, a friendly and concise AI travel-planning assistant inside the TripPilot app.
@@ -47,6 +48,38 @@ class AssistantViewModel : ViewModel() {
                     apiKey = apiKey,
                     systemPrompt = SYSTEM_PROMPT,
                     conversation = updatedConversation
+                )
+                _messages.value = _messages.value + ChatMessage(text = reply, isFromUser = false)
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Something went wrong — please try again."
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun sendMessageWithImage(text: String, image: Bitmap) {
+        if (_isLoading.value) return
+
+        val apiKey = BuildConfig.GEMINI_API_KEY
+        if (apiKey.isBlank()) {
+            _errorMessage.value = "No API key found. Add GEMINI_API_KEY to local.properties and rebuild."
+            return
+        }
+
+        val messageText = text.ifBlank { "What can you tell me about this?" }
+        val updatedConversation = _messages.value + ChatMessage(text = messageText, isFromUser = true)
+        _messages.value = updatedConversation
+        _isLoading.value = true
+        _errorMessage.value = null
+
+        viewModelScope.launch {
+            try {
+                val reply = GeminiApiClient.sendMessageWithImage(
+                    apiKey = apiKey,
+                    systemPrompt = SYSTEM_PROMPT,
+                    conversation = updatedConversation,
+                    image = image
                 )
                 _messages.value = _messages.value + ChatMessage(text = reply, isFromUser = false)
             } catch (e: Exception) {

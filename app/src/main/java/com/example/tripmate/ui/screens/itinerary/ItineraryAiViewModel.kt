@@ -48,7 +48,8 @@ class ItineraryAiViewModel : ViewModel() {
                     "costLabel" (e.g. "₹300"), "whyThis" (one short sentence).
                 """.trimIndent()
                 val raw = GeminiApiClient.generateJson(apiKey, prompt)
-                onResult(parseItems(raw))
+                val enriched = com.example.tripmate.data.WikipediaImageService.enrichAll(parseItems(raw), destination)
+                onResult(enriched)
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Couldn't replan this day — please try again."
             } finally {
@@ -74,7 +75,8 @@ class ItineraryAiViewModel : ViewModel() {
                     "time", "title", "durationLabel", "costLabel", "whyThis".
                 """.trimIndent()
                 val raw = GeminiApiClient.generateJson(apiKey, prompt)
-                onResult(parseItems(raw).first())
+                val enriched = com.example.tripmate.data.WikipediaImageService.enrichAll(parseItems(raw), destination)
+                onResult(enriched.first())
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Couldn't find a replacement — please try again."
             } finally {
@@ -95,18 +97,8 @@ class ItineraryAiViewModel : ViewModel() {
                 durationLabel = obj.optString("durationLabel", "1h"),
                 costLabel = obj.optString("costLabel", "₹0"),
                 whyThis = obj.optString("whyThis", ""),
-                icon = iconFor(title)
+                icon = com.example.tripmate.util.ActivityIconMapper.iconFor(title)
             )
-        }
-    }
-
-    private fun iconFor(title: String): ImageVector {
-        val t = title.lowercase()
-        return when {
-            listOf("breakfast", "lunch", "dinner", "cafe", "food").any { it in t } -> Icons.Filled.Restaurant
-            listOf("fort", "palace", "museum", "temple").any { it in t } -> Icons.Filled.Castle
-            listOf("shop", "market").any { it in t } -> Icons.Filled.LocalMall
-            else -> Icons.Filled.Explore
         }
     }
 }

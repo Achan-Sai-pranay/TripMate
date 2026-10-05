@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
@@ -54,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.tripmate.model.TransportOption
 import com.example.tripmate.model.TravelPace
@@ -142,17 +144,46 @@ fun CreateTripConstraintsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         SectionTitle(icon = Icons.Filled.AccountBalanceWallet, title = "Total Budget")
-                        Text(
-                            text = "\u20B9${String.format(Locale("en", "IN"), "%,d", constraints.budget)}",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
                     }
+
+                    // Manual text entry — no ceiling, syncs both ways with the slider below
+                    var budgetText by remember(constraints.budget) {
+                        mutableStateOf(constraints.budget.toString())
+                    }
+                    OutlinedTextField(
+                        value = budgetText,
+                        onValueChange = { input ->
+                            budgetText = input.filter { it.isDigit() }
+                            budgetText.toIntOrNull()?.let { value ->
+                                constraints = constraints.copy(budget = value.coerceIn(0, 10_000_000))
+                            }
+                        },
+                        leadingIcon = {
+                            Text(
+                                "₹",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = Dimens.sm)
+                            )
+                        },
+                        label = { Text("Enter amount") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Dimens.sm),
+                        shape = RoundedCornerShape(Dimens.radiusMd)
+                    )
+
+                    // Visual slider capped at 50k; text field handles values above that
                     Slider(
-                        value = constraints.budget.toFloat(),
-                        onValueChange = { constraints = constraints.copy(budget = it.toInt()) },
+                        value = constraints.budget.toFloat().coerceIn(0f, 50_000f),
+                        onValueChange = {
+                            constraints = constraints.copy(budget = it.toInt())
+                            budgetText = it.toInt().toString()
+                        },
                         valueRange = 0f..50_000f,
-                        steps = 49, // 1,000-rupee increments
+                        steps = 49,
                         modifier = Modifier.padding(top = Dimens.sm),
                         colors = SliderDefaults.colors(
                             thumbColor = MaterialTheme.colorScheme.primary,
@@ -164,8 +195,8 @@ fun CreateTripConstraintsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("\u20B90", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("\u20B950,000+", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("₹0", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("₹50,000+ (type above for more)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -300,6 +331,7 @@ private fun ConstraintsTopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .padding(horizontal = Dimens.marginMobile, vertical = Dimens.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -312,7 +344,7 @@ private fun ConstraintsTopBar(
             )
         }
         Text(
-            text = "STEP 5 OF 6",
+            text = "STEP 3 OF 3",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.secondary
         )

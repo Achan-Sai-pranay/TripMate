@@ -54,9 +54,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Hotel
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Surface
+import androidx.compose.material3.FilledTonalButton
 import coil.compose.AsyncImage
+import com.example.tripmate.model.ItineraryDay
 import com.example.tripmate.model.ItineraryItem
 import com.example.tripmate.model.ItineraryTab
+import com.example.tripmate.model.StayOption
+import com.example.tripmate.model.DiningOption
 import com.example.tripmate.model.TripSummary
 import com.example.tripmate.ui.theme.Dimens
 
@@ -276,6 +292,8 @@ fun ItineraryViewTabs(
 private fun tabIcon(tab: ItineraryTab) = when (tab) {
     ItineraryTab.ITINERARY -> Icons.AutoMirrored.Filled.FormatListBulleted
     ItineraryTab.MAP -> Icons.Filled.Map
+    ItineraryTab.STAYS -> Icons.Filled.Hotel
+    ItineraryTab.DINING -> Icons.Filled.Restaurant
     ItineraryTab.BUDGET -> Icons.Filled.Payments
 }
 
@@ -708,4 +726,463 @@ fun EditItineraryItemDialog(
         }
     )
 }
+
+@Composable
+fun InteractiveMapTab(
+    destination: String,
+    day: ItineraryDay,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val items = day.items
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Dimens.md)
+    ) {
+        // Interactive route overview card
+        Card(
+            shape = RoundedCornerShape(Dimens.radiusLg),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(Dimens.md)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Route for Day ${day.dayNumber}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${items.size} pinned stops in $destination",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            val gmmIntentUri = android.net.Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${android.net.Uri.encode(items.lastOrNull()?.title ?: destination)}")
+                            val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, gmmIntentUri)
+                            try {
+                                context.startActivity(mapIntent)
+                            } catch (_: Exception) {
+                                val browserIntent = android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=${android.net.Uri.encode(destination)}")
+                                )
+                                context.startActivity(browserIntent)
+                            }
+                        },
+                        contentPadding = PaddingValues(horizontal = Dimens.md, vertical = Dimens.xs)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.OpenInNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Open Map", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+
+        // Stops sequence with distance/travel indicators
+        items.forEachIndexed { index, item ->
+            Card(
+                shape = RoundedCornerShape(Dimens.radiusMd),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        val geoUri = android.net.Uri.parse("geo:0,0?q=${android.net.Uri.encode("${item.title}, $destination")}")
+                        val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, geoUri)
+                        try {
+                            context.startActivity(mapIntent)
+                        } catch (_: Exception) {
+                            val browserIntent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=${android.net.Uri.encode("${item.title}, $destination")}")
+                            )
+                            context.startActivity(browserIntent)
+                        }
+                    }
+            ) {
+                Row(
+                    modifier = Modifier.padding(Dimens.md),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "${index + 1}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(Dimens.md))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = item.time,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        item.placeDetails?.let { details ->
+                            Row(
+                                modifier = Modifier.padding(top = Dimens.xs),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Filled.Star,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFFB800),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text(
+                                        text = String.format(java.util.Locale.US, "%.1f", details.rating),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = " (${details.reviewCount})",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (details.openingHours.isNotBlank()) {
+                                    Text(
+                                        text = details.openingHours,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.tertiary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Icon(
+                        imageVector = Icons.Filled.Place,
+                        contentDescription = "Pin on map",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // Connecting travel leg line
+            if (index < items.lastIndex) {
+                val leg = item.travelToNext
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 28.dp, top = 2.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(2.dp)
+                            .height(26.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant)
+                    )
+                    Spacer(modifier = Modifier.width(Dimens.md))
+                    Surface(
+                        shape = RoundedCornerShape(Dimens.radiusFull),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.DirectionsWalk,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (leg != null) "${leg.distanceLabel} • ${leg.durationLabel} (${leg.transportMode})" else "~10-15 min travel",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StaysSectionView(
+    stays: List<StayOption>,
+    modifier: Modifier = Modifier
+) {
+    if (stays.isEmpty()) {
+        Card(
+            modifier = modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            shape = RoundedCornerShape(Dimens.radiusLg)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(Dimens.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No accommodations listed yet for this itinerary.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Dimens.md)
+    ) {
+        stays.forEach { stay ->
+            Card(
+                shape = RoundedCornerShape(Dimens.radiusLg),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(Dimens.md)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = Dimens.sm)) {
+                            Surface(
+                                shape = RoundedCornerShape(Dimens.radiusFull),
+                                color = when (stay.tier.lowercase()) {
+                                    "budget" -> MaterialTheme.colorScheme.secondaryContainer
+                                    "luxury" -> MaterialTheme.colorScheme.tertiaryContainer
+                                    else -> MaterialTheme.colorScheme.primaryContainer
+                                }
+                            ) {
+                                Text(
+                                    text = stay.tier.uppercase(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when (stay.tier.lowercase()) {
+                                        "budget" -> MaterialTheme.colorScheme.onSecondaryContainer
+                                        "luxury" -> MaterialTheme.colorScheme.onTertiaryContainer
+                                        else -> MaterialTheme.colorScheme.onPrimaryContainer
+                                    },
+                                    modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 2.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(Dimens.xs))
+                            Text(
+                                text = stay.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (stay.location.isNotBlank()) {
+                                Text(
+                                    text = stay.location,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = stay.pricePerNight,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(top = 2.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Star,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFFB800),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = String.format(java.util.Locale.US, "%.1f", stay.rating),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+
+                    if (stay.whyRecommended.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(Dimens.sm))
+                        Text(
+                            text = stay.whyRecommended,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DiningSectionView(
+    dining: List<DiningOption>,
+    modifier: Modifier = Modifier
+) {
+    if (dining.isEmpty()) {
+        Card(
+            modifier = modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            shape = RoundedCornerShape(Dimens.radiusLg)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(Dimens.xl),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No culinary recommendations listed yet for this trip.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Dimens.md)
+    ) {
+        dining.forEach { place ->
+            Card(
+                shape = RoundedCornerShape(Dimens.radiusLg),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(Dimens.md)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = Dimens.sm)) {
+                            Text(
+                                text = place.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Dimens.xs),
+                                modifier = Modifier.padding(top = 2.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(Dimens.radiusFull),
+                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                ) {
+                                    Text(
+                                        text = place.cuisine,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 2.dp)
+                                    )
+                                }
+                                if (place.priceRange.isNotBlank()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(Dimens.radiusFull),
+                                        color = MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Text(
+                                            text = place.priceRange,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.Star,
+                                contentDescription = null,
+                                tint = Color(0xFFFFB800),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = String.format(java.util.Locale.US, "%.1f", place.rating),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    if (place.famousFor.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(Dimens.sm))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.Restaurant,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Must try: ${place.famousFor}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 

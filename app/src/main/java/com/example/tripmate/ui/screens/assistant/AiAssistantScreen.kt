@@ -1,5 +1,7 @@
 package com.example.tripmate.ui.screens.assistant
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -8,6 +10,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,9 +31,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
@@ -52,6 +58,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import android.net.Uri
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -61,6 +68,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.Activity
+import android.content.Intent
+import android.graphics.Bitmap
+import android.provider.MediaStore
+import android.speech.RecognizerIntent
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.asImageBitmap
+import java.util.Locale
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.tripmate.model.AssistantSuggestion
@@ -84,6 +100,51 @@ fun AiAssistantScreen(
     var inputText by remember { mutableStateOf("") }
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    var attachedImage by remember { mutableStateOf<Bitmap?>(null) }
+
+    val context = LocalContext.current
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        uri?.let {
+            val bitmap = if (android.os.Build.VERSION.SDK_INT >= 28) {
+                val source = android.graphics.ImageDecoder.createSource(context.contentResolver, it)
+                android.graphics.ImageDecoder.decodeBitmap(source)
+            } else {
+                @Suppress("DEPRECATION")
+                MediaStore.Images.Media.getBitmap(context.contentResolver, it)
+            }
+            attachedImage = bitmap
+        }
+    }
+
+    val voiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spokenText = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+            if (!spokenText.isNullOrBlank()) {
+                viewModel.sendMessage(spokenText)
+            }
+        }
+    }
+
+    fun startVoiceInput() {
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask TripPilot anything...")
+        }
+        try {
+            voiceLauncher.launch(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Voice input isn't available on this device", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     val errorMessage by viewModel.errorMessage.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -153,7 +214,10 @@ fun AiAssistantScreen(
                 verticalArrangement = Arrangement.spacedBy(Dimens.md)
             ) {
                 item {
-                    AiOrbSection(modifier = Modifier.padding(vertical = Dimens.lg))
+                    AiOrbSection(
+                        onOrbClick = ::startVoiceInput,
+                        modifier = Modifier.padding(vertical = Dimens.lg)
+                    )
                 }
 
                 if (messages.isEmpty()) {
@@ -182,14 +246,36 @@ fun AiAssistantScreen(
                 }
             }
 
+            attachedImage?.let { bitmap ->
+                AttachedImagePreview(
+                    bitmap = bitmap,
+                    onRemove = { attachedImage = null }
+                )
+            }
+
             AssistantInputBar(
                 value = inputText,
                 onValueChange = { inputText = it },
-                onAttachClick = { /* wired up in the features pass */ },
+                onAttachClick = {
+                    photoPickerLauncher.launch(
+                        androidx.activity.result.PickVisualMediaRequest(
+                            ActivityResultContracts.PickVisualMedia.ImageOnly
+                        )
+                    )
+                },
+                onMicClick = ::startVoiceInput,
                 onSendClick = {
-                    if (inputText.isNotBlank()) {
-                        viewModel.sendMessage(inputText)
-                        inputText = ""
+                    val image = attachedImage
+                    when {
+                        image != null -> {
+                            viewModel.sendMessageWithImage(inputText, image)
+                            inputText = ""
+                            attachedImage = null
+                        }
+                        inputText.isNotBlank() -> {
+                            viewModel.sendMessage(inputText)
+                            inputText = ""
+                        }
                     }
                 },
                 sendEnabled = !isLoading
@@ -207,6 +293,7 @@ private fun AssistantTopBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .padding(horizontal = Dimens.marginMobile, vertical = Dimens.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -236,7 +323,7 @@ private fun AssistantTopBar(
 }
 
 @Composable
-private fun AiOrbSection(modifier: Modifier = Modifier) {
+private fun AiOrbSection(onOrbClick: () -> Unit, modifier: Modifier = Modifier) {
     val infiniteTransition = rememberInfiniteTransition(label = "orb-pulse")
     val pulseScale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -254,17 +341,50 @@ private fun AiOrbSection(modifier: Modifier = Modifier) {
                     Brush.radialGradient(
                         colors = listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary)
                     )
-                ),
+                )
+                .clickable(onClick = onOrbClick),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(40.dp))
+            Icon(Icons.Filled.GraphicEq, contentDescription = "Tap to speak", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(40.dp))
         }
         Text(
-            text = "Ask me anything",
+            text = "Tap to speak, or type below",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = Dimens.md)
         )
+    }
+}
+
+@Composable
+private fun AttachedImagePreview(bitmap: Bitmap, onRemove: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.marginMobile, vertical = Dimens.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box {
+            androidx.compose.foundation.Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Attached photo",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(Dimens.radiusSm))
+            )
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(20.dp).align(Alignment.TopEnd)
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Remove photo",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                )
+            }
+        }
     }
 }
 
@@ -346,6 +466,7 @@ private fun AssistantInputBar(
     value: String,
     onValueChange: (String) -> Unit,
     onAttachClick: () -> Unit,
+    onMicClick: () -> Unit,
     onSendClick: () -> Unit,
     sendEnabled: Boolean,
     modifier: Modifier = Modifier
@@ -375,6 +496,9 @@ private fun AssistantInputBar(
                 cursorColor = MaterialTheme.colorScheme.primary
             )
         )
+        IconButton(onClick = onMicClick) {
+            Icon(Icons.Filled.Mic, contentDescription = "Speak", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         IconButton(onClick = onAttachClick) {
             Icon(Icons.Filled.AddPhotoAlternate, contentDescription = "Attach file", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
