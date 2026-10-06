@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -44,6 +45,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.tripmate.ui.theme.Dimens
 import com.example.tripmate.ui.theme.OutlineVariant
@@ -86,6 +88,7 @@ fun HomeHeader(
 fun HomeSearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
+    onSearchSubmit: () -> Unit,
     onFilterClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -99,12 +102,16 @@ fun HomeSearchBar(
             .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = Icons.Filled.Search,
-            contentDescription = "Search",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp, end = 8.dp)
-        )
+        androidx.compose.material3.IconButton(
+            onClick = onSearchSubmit,
+            modifier = Modifier.padding(start = 8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = "Search",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
@@ -117,7 +124,13 @@ fun HomeSearchBar(
                 )
             },
             singleLine = true,
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Sentences,
+                imeAction = androidx.compose.ui.text.input.ImeAction.Search
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onSearch = { onSearchSubmit() }
+            ),
             textStyle = MaterialTheme.typography.bodyLarge,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color.Transparent,
@@ -162,7 +175,7 @@ fun PlanNewTripCard(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(
-                model = "https://lh3.googleusercontent.com/aida-public/AB6AXuDb58fy2img1zqQHlIZgBPMpLDTovMscnEDuwj5ucMdN-OhLtm9JBLnIqx1hmSsBCP_v0JSgPs8yIp38sXhO9OdF27aLiVtko2JDFok4R8MIK1Cko_vy_aicCHStVqUc0EBfDHtdIZZeClk_qF9q4hx9OrVDFSQZsK3ieYZeciBeZh0n8QrAlonEfvtTZ7YkhMkuY5TCiWy55duzGgYnO3Ww3Ss6yXapr7u1xZQywNGUwwDAaTdsFYyBg",
+                model = com.example.tripmate.data.WikipediaImageService.FALLBACK_IMAGE_URL,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -248,12 +261,27 @@ fun UpcomingTripCard(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = imageUrl,
-                contentDescription = destination,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+            if (imageUrl.isNotBlank()) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = destination,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.tertiary
+                                )
+                            )
+                        )
+                )
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -375,4 +403,107 @@ fun Modifier.clickableNoRipple(onClick: (() -> Unit)?): Modifier {
         indication = null,
         onClick = onClick
     )
+}
+
+@Composable
+fun NoUpcomingTripCard(onPlanClick: () -> Unit, modifier: Modifier = Modifier) {
+    androidx.compose.material3.Card(
+        onClick = onPlanClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Dimens.radiusCard),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Dimens.xl),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "No trips planned yet",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = "Tap to start planning your next adventure with AI.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(top = Dimens.xs)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QuickTripLengthSheet(
+    onDismiss: () -> Unit,
+    onSelect: (Long, Long) -> Unit
+) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(Dimens.lg).padding(bottom = Dimens.xl)) {
+            Text("How long is your trip?", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Column(modifier = Modifier.padding(top = Dimens.md), verticalArrangement = Arrangement.spacedBy(Dimens.sm)) {
+                TripLengthOption("Weekend (3 days)") { onSelect(nowMillis(), nowMillis() + 2 * DAY_MILLIS) }
+                TripLengthOption("One Week (7 days)") { onSelect(nowMillis(), nowMillis() + 6 * DAY_MILLIS) }
+                TripLengthOption("Two Weeks (14 days)") { onSelect(nowMillis(), nowMillis() + 13 * DAY_MILLIS) }
+                TripLengthOption("I'll set custom dates") { onSelect(nowMillis(), nowMillis() + 2 * DAY_MILLIS) }
+            }
+        }
+    }
+}
+
+private const val DAY_MILLIS = 24 * 60 * 60 * 1000L
+private fun nowMillis() = java.util.Calendar.getInstance().timeInMillis
+
+@Composable
+private fun TripLengthOption(label: String, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Dimens.radiusMd),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(Dimens.md))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BudgetGemsSheet(
+    gems: List<com.example.tripmate.ui.screens.home.BudgetGem>,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onPickDestination: (String) -> Unit
+) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.padding(Dimens.lg).padding(bottom = Dimens.xl)) {
+            Text("Budget-Friendly Destinations", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxWidth().padding(Dimens.xl), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                }
+            } else {
+                Column(modifier = Modifier.padding(top = Dimens.md), verticalArrangement = Arrangement.spacedBy(Dimens.sm)) {
+                    gems.forEach { gem ->
+                        Card(
+                            onClick = { onPickDestination(gem.destination) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(Dimens.radiusMd),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Column(modifier = Modifier.padding(Dimens.md)) {
+                                Text(gem.destination, style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp), color = MaterialTheme.colorScheme.onSurface)
+                                Text(gem.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

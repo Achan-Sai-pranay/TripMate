@@ -3,6 +3,7 @@ package com.example.tripmate.ui.components
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -25,6 +26,7 @@ fun WizardTopBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .padding(horizontal = Dimens.marginMobile, vertical = Dimens.xs)
     ) {
         IconButton(
@@ -38,7 +40,7 @@ fun WizardTopBar(
             )
         }
         Text(
-            text = "TripPilot",
+            text = "TripMate",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,

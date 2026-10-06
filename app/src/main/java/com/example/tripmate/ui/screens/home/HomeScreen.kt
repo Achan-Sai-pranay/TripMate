@@ -12,48 +12,67 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.HowToVote
 import androidx.compose.material.icons.filled.LocalActivity
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.example.tripmate.model.UpcomingTrip
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.tripmate.ui.components.BottomNavTab
 import com.example.tripmate.ui.components.TripPilotBottomNav
+import com.example.tripmate.ui.shared.TripPlanViewModel
 import com.example.tripmate.ui.theme.Dimens
 
 private const val USER_AVATAR_URL =
     "https://lh3.googleusercontent.com/aida-public/AB6AXuCuNVTDMRg1r_UHptkk5G2653Tt632Ge0hBDx5WfDCK77d4H7xRbPsUBdcExMjyaKT6ymf202U63-1FrpoubqPWWKttheWHIUqdvzKHMV9dCaNSgDxDCp_ZLq_KXrCDpkhiIiFaquLfX51ozRhE4SCDpzlisKaKE7Pkat9ezhwAzykRq89Fma3YQ_GHDT9_3x37Fbcwalnzea6NZ6rbXGH5VC3NTLtV_ao4MwxGI-XkHUUfXcxX60ryWA"
 
-private const val UPCOMING_TRIP_IMAGE_URL =
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuCkulXU_CfFaaokxWBMQ23aLl5yf3r6ANLhI9_M-1mPlkOO_hg7Ux7tXZ3gt70mmc-NwWFd0Qya02v3jgCcFkKe8G_JsQ3yspXOyoKIcpa-MUs58TZThGalWQMhU1wSA-Hwcq17UKPlKQZysoR9aDqUJDyoCNBU6gtMcqYrV8TcbPIGbQIZwHJFKSpGaHICN2DgNwR21TljPZUPKcUxnz0xRmpI5wKegTwFQ4PIherufeVay1pwuwrhAQ"
-
 @Composable
 fun HomeScreen(
+    tripPlanViewModel: TripPlanViewModel,
     onPlanNewTripClick: () -> Unit,
     onUpcomingTripClick: () -> Unit,
     onMyTripsClick: () -> Unit,
     onAssistantClick: () -> Unit,
     onProfileClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onSearchDestination: (String) -> Unit,
+    onQuickTripLength: (Long, Long) -> Unit,
+    onTravelStatsClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: HomeViewModel = viewModel()
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    val tripPlan by tripPlanViewModel.tripPlan.collectAsState()
+    val budgetGems by viewModel.budgetGems.collectAsState()
+    val isLoadingGems by viewModel.isLoadingGems.collectAsState()
+    val gemsError by viewModel.errorMessage.collectAsState()
 
-    val upcomingTrip = remember {
-        UpcomingTrip(
-            destination = "Hyderabad",
-            dateRange = "12-15 September",
-            travelerCount = 4,
-            imageUrl = UPCOMING_TRIP_IMAGE_URL
-        )
+    var showFilterSheet by remember { mutableStateOf(false) }
+    var showBudgetGemsSheet by remember { mutableStateOf(false) }
+    var showGroupVotingInfo by remember { mutableStateOf(false) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(gemsError) {
+        gemsError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.dismissError()
+        }
     }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             TripPilotBottomNav(
                 selectedTab = BottomNavTab.EXPLORE,
@@ -73,7 +92,7 @@ fun HomeScreen(
             contentPadding = PaddingValues(
                 start = Dimens.marginMobile,
                 end = Dimens.marginMobile,
-                top = Dimens.xl,
+                top = innerPadding.calculateTopPadding() + Dimens.md,
                 bottom = innerPadding.calculateBottomPadding() + Dimens.lg
             ),
             verticalArrangement = Arrangement.spacedBy(Dimens.xl)
@@ -83,11 +102,17 @@ fun HomeScreen(
             }
 
             item {
-                HomeSearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    onFilterClick = { /* filters not in this export */ }
-                )
+                Column {
+                    com.example.tripmate.ui.components.SmartDestinationSearchField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onDestinationSelected = { dest ->
+                            searchQuery = "${dest.name}, ${dest.country}"
+                            onSearchDestination(searchQuery)
+                        },
+                        placeholder = "Where to? (e.g. Goa, Paris, Manali)"
+                    )
+                }
             }
 
             item {
@@ -98,16 +123,29 @@ fun HomeScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(Dimens.md)) {
                     SectionHeader(
                         title = "Upcoming Trip",
-                        actionLabel = "View all",
+                        actionLabel = if (tripPlan != null) "View all" else null,
                         onActionClick = onUpcomingTripClick
                     )
-                    UpcomingTripCard(
-                        destination = upcomingTrip.destination,
-                        dateRange = upcomingTrip.dateRange,
-                        travelerCount = upcomingTrip.travelerCount,
-                        imageUrl = upcomingTrip.imageUrl,
-                        onViewTripClick = onUpcomingTripClick
-                    )
+                    val plan = tripPlan
+                    if (plan == null) {
+                        NoUpcomingTripCard(onPlanClick = onPlanNewTripClick)
+                    } else {
+                        // Photo of THIS trip's destination (cached after the first lookup)
+                        val tripImageUrl by androidx.compose.runtime.produceState(
+                            initialValue = "",
+                            plan.destination
+                        ) {
+                            value = com.example.tripmate.data.WikipediaImageService.imageForDestination(plan.destination)
+                                ?: com.example.tripmate.data.WikipediaImageService.FALLBACK_IMAGE_URL
+                        }
+                        UpcomingTripCard(
+                            destination = plan.destination,
+                            dateRange = plan.dateRangeLabel,
+                            travelerCount = plan.travelerCount,
+                            imageUrl = tripImageUrl,
+                            onViewTripClick = onUpcomingTripClick
+                        )
+                    }
                 }
             }
 
@@ -120,24 +158,62 @@ fun HomeScreen(
                         QuickActionCard(
                             label = "Discover Budget Gems",
                             icon = Icons.Filled.LocalActivity,
-                            onClick = { /* not in this export */ },
+                            onClick = {
+                                showBudgetGemsSheet = true
+                                if (budgetGems.isEmpty()) viewModel.fetchBudgetGems()
+                            },
                             modifier = Modifier.weight(1f)
                         )
                         QuickActionCard(
                             label = "Group Voting",
                             icon = Icons.Filled.HowToVote,
-                            onClick = { /* not in this export */ },
+                            onClick = { showGroupVotingInfo = true },
                             modifier = Modifier.weight(1f)
                         )
                     }
                     QuickActionCard(
                         label = "Travel Stats",
                         icon = Icons.Filled.BarChart,
-                        onClick = { /* not in this export */ },
+                        onClick = onTravelStatsClick,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
         }
+    }
+
+    if (showFilterSheet) {
+        QuickTripLengthSheet(
+            onDismiss = { showFilterSheet = false },
+            onSelect = { start, end ->
+                showFilterSheet = false
+                onQuickTripLength(start, end)
+            }
+        )
+    }
+
+    if (showBudgetGemsSheet) {
+        BudgetGemsSheet(
+            gems = budgetGems,
+            isLoading = isLoadingGems,
+            onDismiss = { showBudgetGemsSheet = false },
+            onPickDestination = { destination ->
+                showBudgetGemsSheet = false
+                onSearchDestination(destination)
+            }
+        )
+    }
+
+    if (showGroupVotingInfo) {
+        AlertDialog(
+            onDismissRequest = { showGroupVotingInfo = false },
+            title = { Text("Not available yet") },
+            text = { Text("Group voting needs multiple people to have accounts and join the same trip — that's not built yet, but it's on the roadmap.") },
+            confirmButton = {
+                TextButton(onClick = { showGroupVotingInfo = false }) {
+                    Text("Got it")
+                }
+            }
+        )
     }
 }
