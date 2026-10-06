@@ -130,11 +130,19 @@ fun HomeScreen(
                     if (plan == null) {
                         NoUpcomingTripCard(onPlanClick = onPlanNewTripClick)
                     } else {
+                        // Photo of THIS trip's destination (cached after the first lookup)
+                        val tripImageUrl by androidx.compose.runtime.produceState(
+                            initialValue = "",
+                            plan.destination
+                        ) {
+                            value = com.example.tripmate.data.WikipediaImageService.imageForDestination(plan.destination)
+                                ?: com.example.tripmate.data.WikipediaImageService.FALLBACK_IMAGE_URL
+                        }
                         UpcomingTripCard(
                             destination = plan.destination,
                             dateRange = plan.dateRangeLabel,
                             travelerCount = plan.travelerCount,
-                            imageUrl = "",
+                            imageUrl = tripImageUrl,
                             onViewTripClick = onUpcomingTripClick
                         )
                     }

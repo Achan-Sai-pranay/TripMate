@@ -17,6 +17,7 @@ datastorePreferences = "1.1.1"
 supabase = "3.1.4"
 ktor = "3.1.3"
 kotlinxSerialization = "1.7.1"
+maplibre = "13.6.1"
 
 
 [libraries]
@@ -46,6 +47,7 @@ supabase-postgrest = { group = "io.github.jan-tennert.supabase", name = "postgre
 supabase-auth = { group = "io.github.jan-tennert.supabase", name = "auth-kt", version.ref = "supabase" }
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+maplibre = { group = "org.maplibre.gl", name = "android-sdk", version.ref = "maplibre" }
 
 
 [plugins]

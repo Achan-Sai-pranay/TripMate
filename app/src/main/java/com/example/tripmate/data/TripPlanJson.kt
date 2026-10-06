@@ -26,6 +26,7 @@ object TripPlanJson {
                     put("whyThis", item.whyThis)
                     put("imageUrl", item.imageUrl ?: JSONObject.NULL)
                     put("isFixed", item.isFixed)
+                    item.placeName?.let { put("placeName", it) }
                 }
 
                 item.placeDetails?.let { place ->
@@ -130,7 +131,8 @@ object TripPlanJson {
                     imageUrl = itemObj.optString("imageUrl").takeIf { it.isNotBlank() && it != "null" },
                     isFixed = itemObj.optBoolean("isFixed", false),
                     placeDetails = placeDetails,
-                    travelToNext = travelLeg
+                    travelToNext = travelLeg,
+                    placeName = if (itemObj.has("placeName")) itemObj.optString("placeName") else null
                 )
             }
             ItineraryDay(

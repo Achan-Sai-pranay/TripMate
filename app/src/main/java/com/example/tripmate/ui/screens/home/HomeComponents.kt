@@ -175,7 +175,7 @@ fun PlanNewTripCard(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             AsyncImage(
-                model = "https://lh3.googleusercontent.com/aida-public/AB6AXuDb58fy2img1zqQHlIZgBPMpLDTovMscnEDuwj5ucMdN-OhLtm9JBLnIqx1hmSsBCP_v0JSgPs8yIp38sXhO9OdF27aLiVtko2JDFok4R8MIK1Cko_vy_aicCHStVqUc0EBfDHtdIZZeClk_qF9q4hx9OrVDFSQZsK3ieYZeciBeZh0n8QrAlonEfvtTZ7YkhMkuY5TCiWy55duzGgYnO3Ww3Ss6yXapr7u1xZQywNGUwwDAaTdsFYyBg",
+                model = com.example.tripmate.data.WikipediaImageService.FALLBACK_IMAGE_URL,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

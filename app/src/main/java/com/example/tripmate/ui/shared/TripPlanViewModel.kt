@@ -11,11 +11,17 @@ import com.example.tripmate.data.TripHistoryRepository
 import com.example.tripmate.data.TripPlanRepository
 import com.example.tripmate.model.ItineraryDay
 import com.example.tripmate.model.ItineraryItem
+import com.example.tripmate.model.PlaceDetails
 import com.example.tripmate.model.TripPlan
 import com.example.tripmate.model.TripPlanRequest
 import com.example.tripmate.model.TripPreferences
 import com.example.tripmate.util.ActivityIconMapper
+import com.example.tripmate.util.GeocodingHelper
 import com.example.tripmate.data.WikipediaImageService
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,9 +51,60 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _isResolvingPlaces = MutableStateFlow(false)
+    val isResolvingPlaces: StateFlow<Boolean> = _isResolvingPlaces.asStateFlow()
+    private var resolveJob: Job? = null
+
     init {
         viewModelScope.launch {
             _tripPlan.value = repository.load()
+            // Trips saved before map support (or interrupted lookups) get their coordinates filled in.
+            resolveMissingCoordinates()
+        }
+    }
+
+    /**
+     * Looks up real coordinates (geocoding) for every itinerary place that doesn't have them yet,
+     * updating the plan progressively so map pins appear as each place is resolved.
+     */
+    fun resolveMissingCoordinates() {
+        resolveJob?.cancel()
+        resolveJob = viewModelScope.launch {
+            val context = getApplication<Application>()
+            _isResolvingPlaces.value = true
+            var changed = false
+            try {
+                val snapshot = _tripPlan.value ?: return@launch
+                for ((dayIndex, day) in snapshot.days.withIndex()) {
+                    for ((itemIndex, original) in day.items.withIndex()) {
+                        if (original.hasCoordinates) continue
+                        val query = original.geocodeQuery?.takeIf { original.placeName?.isBlank() != true } ?: continue
+                        val point = GeocodingHelper.resolve(context, query, snapshot.destination) ?: continue
+
+                        // Re-read the plan: the user may have edited it while we were looking things up.
+                        val current = _tripPlan.value ?: return@launch
+                        val currentItem = current.days.getOrNull(dayIndex)?.items?.getOrNull(itemIndex)
+                        if (currentItem == null || currentItem.title != original.title) continue
+                        val updatedItem = currentItem.copy(
+                            placeDetails = (currentItem.placeDetails ?: PlaceDetails())
+                                .copy(latitude = point.lat, longitude = point.lng)
+                        )
+                        val days = current.days.toMutableList()
+                        days[dayIndex] = days[dayIndex].copy(
+                            items = days[dayIndex].items.toMutableList().also { it[itemIndex] = updatedItem }
+                        )
+                        _tripPlan.value = current.copy(days = days)
+                        changed = true
+                    }
+                }
+            } finally {
+                val self = coroutineContext[Job]
+                withContext(NonCancellable) {
+                    if (changed) _tripPlan.value?.let { repository.save(it) }
+                    // Only the newest lookup job clears the flag (an older, cancelled one must not).
+                    if (resolveJob === self) _isResolvingPlaces.value = false
+                }
+            }
         }
     }
 
@@ -130,6 +187,8 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 _tripPlan.value = finalPlan
                 repository.save(finalPlan)
                 historyRepository.append(finalPlan)
+                // Itinerary is visible now; geocode its places in the background for the map.
+                resolveMissingCoordinates()
             } catch (e: Throwable) {
                 _errorMessage.value = e.message ?: "Couldn't generate your trip — please try again."
             } finally {
@@ -181,6 +240,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                       "durationLabel": "1.5h",
                       "costLabel": "₹300",
                       "whyThis": "one short sentence",
+                      "placeName": "real, searchable name of the specific place or venue, e.g. Fort Aguada (null for generic activities such as free time or hotel check-in)",
                       "placeDetails": { "rating": 4.6, "reviewCount": 2400, "openingHours": "09:00 AM - 05:30 PM" },
                       "travelToNext": { "distanceLabel": "1.8 km", "durationLabel": "8 mins", "transportMode": "Drive" }
                     }
@@ -236,7 +296,10 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                     whyThis = itemObj.optString("whyThis", ""),
                     icon = ActivityIconMapper.iconFor(title),
                     placeDetails = placeDetails,
-                    travelToNext = travelToNext
+                    travelToNext = travelToNext,
+                    placeName = if (itemObj.has("placeName")) {
+                        if (itemObj.isNull("placeName")) "" else itemObj.optString("placeName").takeIf { it != "null" } ?: ""
+                    } else null
                 )
             }
             ItineraryDay(
@@ -339,6 +402,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         val updatedPlan = plan.copy(days = updatedDays)
         _tripPlan.value = updatedPlan
         viewModelScope.launch { repository.save(updatedPlan) }
+        resolveMissingCoordinates()
     }
 
     fun clearTrip() {

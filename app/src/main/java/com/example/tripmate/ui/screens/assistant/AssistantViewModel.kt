@@ -1,6 +1,7 @@
 package com.example.tripmate.ui.screens.assistant
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tripmate.BuildConfig
 import com.example.tripmate.data.GeminiApiClient
@@ -11,6 +12,7 @@ import com.example.tripmate.util.GeocodingHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import android.graphics.Bitmap
 
@@ -33,9 +35,19 @@ FORMAT RULES:
 
 4. When recommending places for specific days (e.g., alternate places for Day 3), mention the Day number explicitly and give 2-4 distinct spots with descriptions.
 5. Keep it punchy, organized, and avoid conversational fluff.
+6. Spot names must be real, searchable places (e.g. "Fort Aguada", not "a scenic fort").
+7. When your answer lists places for a destination, end the reply with one final line exactly like:
+   [[DESTINATION: Goa, India]]
+   (the main city/region/country the places are in).
 """.trimIndent()
 
-class AssistantViewModel : ViewModel() {
+private val DESTINATION_TAG = Regex("""\[\[\s*DESTINATION\s*:\s*(.*?)\s*\]\]""", RegexOption.IGNORE_CASE)
+private val DAY_HEADER = Regex("""^(?:#+\s*)?Day\s+(\d+)\b""", RegexOption.IGNORE_CASE)
+private val PARENTHETICAL = Regex("""\(.*?\)""")
+private val BRACKETS = Regex("""[\[\]]""")
+private const val MAX_PLACES = 20
+
+class AssistantViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
@@ -51,7 +63,8 @@ class AssistantViewModel : ViewModel() {
     val activeMapRoute: StateFlow<AssistantMapRoute?> = _activeMapRoute.asStateFlow()
 
     // Preserved active destination across conversational turns
-    private var activeDestination: String = "Goa"
+    private var activeDestination: String = ""
+    private var geocodeJob: Job? = null
 
     fun setInitialDestination(destination: String) {
         if (destination.isNotBlank()) {
@@ -83,9 +96,6 @@ class AssistantViewModel : ViewModel() {
         _isLoading.value = true
         _errorMessage.value = null
 
-        // Prepare map pins immediately for smooth responsiveness
-        detectAndPrepareMapPins(text, activeDestination)
-
         viewModelScope.launch {
             try {
                 val reply = GeminiApiClient.sendMessage(
@@ -93,8 +103,7 @@ class AssistantViewModel : ViewModel() {
                     systemPrompt = SYSTEM_PROMPT,
                     conversation = updatedConversation
                 )
-                _messages.value = _messages.value + ChatMessage(text = reply, isFromUser = false)
-                extractPinsFromReply(reply, text, activeDestination)
+                handleReply(reply)
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Something went wrong — please try again."
             } finally {
@@ -123,8 +132,6 @@ class AssistantViewModel : ViewModel() {
         _isLoading.value = true
         _errorMessage.value = null
 
-        detectAndPrepareMapPins(messageText, activeDestination)
-
         viewModelScope.launch {
             try {
                 val reply = GeminiApiClient.sendMessageWithImage(
@@ -133,8 +140,7 @@ class AssistantViewModel : ViewModel() {
                     conversation = updatedConversation,
                     image = image
                 )
-                _messages.value = _messages.value + ChatMessage(text = reply, isFromUser = false)
-                extractPinsFromReply(reply, messageText, activeDestination)
+                handleReply(reply)
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Something went wrong — please try again."
             } finally {
@@ -166,126 +172,89 @@ class AssistantViewModel : ViewModel() {
         }
     }
 
-    private fun detectAndPrepareMapPins(query: String, destination: String) {
-        val lower = query.lowercase()
-        val isAlternatePlaces = lower.contains("alternate") || lower.contains("alternative") || lower.contains("options")
-        val targetDay = when {
-            lower.contains("day 1") -> 1
-            lower.contains("day 2") -> 2
-            lower.contains("day 3") -> 3
-            lower.contains("day 4") -> 4
-            else -> 1
-        }
+    private class RawPlace(val name: String, val day: Int, val order: Int)
 
-        val rawPins = if (isAlternatePlaces && destination.equals("Goa", ignoreCase = true)) {
-            listOf(
-                Triple("Jardín Botánico", targetDay, "Campal, Panaji"),
-                Triple("Local Art District", targetDay, "Sunaparanta, Panaji"),
-                Triple("Miramar Beach & Sunset", targetDay, "Miramar, Panaji"),
-                Triple("Fontainhas Latin Quarter", targetDay, "Panaji Heritage Walk")
-            )
-        } else {
-            when (destination.lowercase()) {
-                "goa" -> listOf(
-                    Triple("Fort Aguada & Lighthouse", 1, "Candolim, North Goa"),
-                    Triple("Candolim Beach", 1, "Candolim, North Goa"),
-                    Triple("Anjuna Beach & Flea Market", 1, "Anjuna, North Goa"),
-                    Triple("Basilica of Bom Jesus", 2, "Old Goa"),
-                    Triple("Fontainhas Latin Quarter", 2, "Panaji"),
-                    Triple("Palolem Beach & Shacks", 3, "Canacona, South Goa")
-                )
-                "kashmir", "srinagar" -> listOf(
-                    Triple("Dal Lake & Shikara Ride", 1, "Dal Lake, Srinagar"),
-                    Triple("Shalimar Bagh Mughal Garden", 1, "Boulevard Rd, Srinagar"),
-                    Triple("Gulmarg Gondola & Snow Peak", 2, "Gulmarg, Kashmir"),
-                    Triple("Betaab Valley & Lidder River", 3, "Pahalgam, Kashmir")
-                )
-                "paris" -> listOf(
-                    Triple("Eiffel Tower", 1, "Champ de Mars"),
-                    Triple("Louvre Museum", 1, "Rue de Rivoli"),
-                    Triple("Notre-Dame Cathedral", 2, "Île de la Cité"),
-                    Triple("Montmartre & Sacré-Cœur", 3, "18th arrondissement")
-                )
-                "kyoto" -> listOf(
-                    Triple("Fushimi Inari Taisha", 1, "Fushimi Ward"),
-                    Triple("Kinkaku-ji Golden Pavilion", 1, "Kita Ward"),
-                    Triple("Arashiyama Bamboo Grove", 2, "Ukyo Ward"),
-                    Triple("Gion Geisha District", 2, "Higashiyama Ward")
-                )
-                else -> listOf(
-                    Triple("Historic Center", 1, "$destination Downtown"),
-                    Triple("Scenic Viewpoint", 2, "$destination Overlook"),
-                    Triple("Local Market & Food Walk", 3, "$destination Bazaars")
-                )
-            }
-        }
-
-        val pins = rawPins.mapIndexed { idx, (title, day, loc) ->
-            GeocodingHelper.createPin(
-                title = title,
-                dayNumber = day,
-                location = loc,
-                destination = destination,
-                index = idx
-            )
-        }
-
-        val title = if (isAlternatePlaces) {
-            "${pins.size} Alternate Stops for Day $targetDay in $destination"
-        } else {
-            "${pins.size} Curated Stops in $destination"
-        }
-
-        _activeMapRoute.value = AssistantMapRoute(
-            destination = destination,
-            itineraryTitle = title,
-            pins = pins
-        )
+    /** Shows the reply (minus the machine-readable tag) and turns its places into map pins. */
+    private fun handleReply(reply: String) {
+        val tag = DESTINATION_TAG.find(reply)
+        val destination = tag?.groupValues?.get(1)?.trim().takeUnless { it.isNullOrBlank() } ?: activeDestination
+        if (destination.isNotBlank()) activeDestination = destination
+        val display = reply.replace(DESTINATION_TAG, "").trimEnd()
+        _messages.value = _messages.value + ChatMessage(text = display, isFromUser = false)
+        buildMapRoute(display, destination)
     }
 
-    private fun extractPinsFromReply(reply: String, query: String, destination: String) {
-        val extracted = mutableListOf<AssistantItineraryPin>()
-        var currentDay = 1
-        var itemIndex = 0
+    /** Parses "Day N" sections and their bullets, then geocodes each place for real coordinates. */
+    private fun buildMapRoute(reply: String, destination: String) {
+        val places = parsePlaces(reply)
+        if (places.isEmpty()) return
 
-        reply.lines().forEach { line ->
-            val trim = line.trim()
-            when {
-                trim.contains("Day 1", ignoreCase = true) -> currentDay = 1
-                trim.contains("Day 2", ignoreCase = true) -> currentDay = 2
-                trim.contains("Day 3", ignoreCase = true) -> currentDay = 3
-                trim.contains("Day 4", ignoreCase = true) -> currentDay = 4
-            }
+        val title = "${places.size} stops" + if (destination.isNotBlank()) " in ${destination.substringBefore(',')}" else ""
+        var pins = places.map { p ->
+            AssistantItineraryPin(
+                title = p.name,
+                dayNumber = p.day,
+                location = if (destination.isBlank()) p.name else "${p.name}, $destination",
+                order = p.order
+            )
+        }
+        // Show the stop list right away; pins appear on the map as each place is resolved.
+        _activeMapRoute.value = AssistantMapRoute(destination, title, pins)
 
-            if (trim.startsWith("-") || trim.startsWith("•") || trim.startsWith("*")) {
-                val cleanLine = trim.trimStart('-', '•', '*', ' ')
-                val spotName = cleanLine
-                    .substringBefore("—")
-                    .substringBefore("-")
-                    .substringBefore(":")
-                    .replace(Regex("[\\[\\]*]"), "")
-                    .trim()
-
-                if (spotName.length in 3..40 && !spotName.contains("http") && !spotName.startsWith("Pro Tip")) {
-                    val pin = GeocodingHelper.createPin(
-                        title = spotName,
-                        dayNumber = currentDay,
-                        location = "$spotName, $destination",
-                        destination = destination,
-                        index = itemIndex++
-                    )
-                    extracted.add(pin)
+        geocodeJob?.cancel()
+        geocodeJob = viewModelScope.launch {
+            val context = getApplication<Application>()
+            pins.forEachIndexed { index, pin ->
+                val point = resolveWithFallbacks(context, pin.title, destination)
+                if (point != null) {
+                    pins = pins.toMutableList().also { it[index] = pin.copy(latitude = point.lat, longitude = point.lng) }
+                    _activeMapRoute.value = AssistantMapRoute(destination, title, pins)
                 }
             }
         }
+    }
 
-        if (extracted.size >= 2) {
-            _activeMapRoute.value = AssistantMapRoute(
-                destination = destination,
-                itineraryTitle = "${extracted.size} Curated Stops in $destination",
-                pins = extracted.take(8)
-            )
+    private suspend fun resolveWithFallbacks(
+        context: android.content.Context,
+        name: String,
+        destination: String
+    ): GeocodingHelper.GeoPoint? {
+        GeocodingHelper.resolve(context, name, destination)?.let { return it }
+        // "Anjuna Beach & Flea Market" -> try "Anjuna Beach"
+        val simplified = name.split(" & ", " and ", " / ").first().trim()
+        if (simplified.isNotBlank() && simplified != name) {
+            return GeocodingHelper.resolve(context, simplified, destination)
         }
+        return null
+    }
+
+    private fun parsePlaces(reply: String): List<RawPlace> {
+        val places = mutableListOf<RawPlace>()
+        var currentDay: Int? = null
+        val orderInDay = mutableMapOf<Int, Int>()
+
+        reply.lines().forEach { raw ->
+            val line = raw.trim().replace("**", "").replace("__", "")
+            DAY_HEADER.find(line)?.let { currentDay = it.groupValues[1].toInt(); return@forEach }
+            if (line.startsWith("💡")) { currentDay = null; return@forEach }
+
+            val day = currentDay ?: return@forEach
+            if (!(line.startsWith("-") || line.startsWith("•") || line.startsWith("*"))) return@forEach
+
+            val name = line.trimStart('-', '•', '*', ' ')
+                .substringBefore(" — ").substringBefore(" – ").substringBefore(" - ")
+                .substringBefore("—").substringBefore(":")
+                .replace(PARENTHETICAL, "")
+                .replace(BRACKETS, "")
+                .trim()
+
+            if (name.length in 3..60 && !name.contains("http")) {
+                val order = (orderInDay[day] ?: 0) + 1
+                orderInDay[day] = order
+                places.add(RawPlace(name, day, order))
+            }
+        }
+        return places.take(MAX_PLACES)
     }
 
     fun dismissError() {

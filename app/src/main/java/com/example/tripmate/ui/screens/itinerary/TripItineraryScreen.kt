@@ -62,6 +62,7 @@ fun TripItineraryScreen(
     val isGenerating by tripPlanViewModel.isGenerating.collectAsState()
     val planError by tripPlanViewModel.errorMessage.collectAsState()
     val tripRequest by tripPlanViewModel.request.collectAsState()
+    val isResolvingPlaces by tripPlanViewModel.isResolvingPlaces.collectAsState()
 
     val isReplanning by aiViewModel.isReplanning.collectAsState()
     val replacingItemKey by aiViewModel.replacingItemKey.collectAsState()
@@ -74,6 +75,9 @@ fun TripItineraryScreen(
     var selectedViewTab by remember { mutableStateOf(ItineraryTab.ITINERARY) }
     var currentDayIndex by remember { mutableStateOf(0) }
     var editingItem by remember { mutableStateOf<Pair<Int, ItineraryItem>?>(null) }
+    // Shared by the itinerary list and the map: the currently highlighted place (pin key)
+    var selectedPinKey by remember { mutableStateOf<String?>(null) }
+    var focusToken by remember { mutableStateOf(0) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -199,10 +203,24 @@ fun TripItineraryScreen(
                     }
                     when (selectedViewTab) {
                         ItineraryTab.ITINERARY -> {
+                            item {
+                                ItineraryMapCard(
+                                    destination = plan.destination,
+                                    day = currentDay,
+                                    selectedKey = selectedPinKey,
+                                    focusToken = focusToken,
+                                    isResolving = isResolvingPlaces,
+                                    onPinSelected = { selectedPinKey = it.key; focusToken++ }
+                                )
+                            }
                             itemsIndexed(currentDay.items, key = { _, item -> item.time + item.title }) { index, item ->
                                 val isReplacing = (item.time + item.title) == replacingItemKey
+                                val pinKey = currentDay.pinKey(index)
                                 TimelineItemRow(
                                     item = item,
+                                    destination = plan.destination,
+                                    isSelected = pinKey != null && pinKey == selectedPinKey,
+                                    onClick = pinKey?.let { key -> { selectedPinKey = key; focusToken++ } },
                                     isLastItem = index == currentDay.items.lastIndex,
                                     isReplacing = isReplacing,
                                     onEditClick = { editingItem = index to item },
@@ -240,7 +258,11 @@ fun TripItineraryScreen(
                             item {
                                 InteractiveMapTab(
                                     destination = plan.destination,
-                                    day = currentDay,
+                                    days = plan.days,
+                                    selectedKey = selectedPinKey,
+                                    focusToken = focusToken,
+                                    isResolving = isResolvingPlaces,
+                                    onSelect = { selectedPinKey = it; focusToken++ },
                                     modifier = Modifier.padding(top = Dimens.sm)
                                 )
                             }

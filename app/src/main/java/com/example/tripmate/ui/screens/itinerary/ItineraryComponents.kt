@@ -355,10 +355,27 @@ fun TimelineItemRow(
     onReplaceClick: () -> Unit,
     onDuplicateClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    destination: String = ""
 ) {
-    val bgImageUrl = item.imageUrl?.takeIf { it.isNotBlank() }
-        ?: com.example.tripmate.util.DestinationImageProvider.getImageFor(item.title)
+    // Destination-specific photo: the item's stored image, else a cached/looked-up photo of THIS place.
+    // Generic activities (breakfast, free time, check-in...) have no place and keep the plain card.
+    val placeName = remember(item.title, item.placeName) {
+        com.example.tripmate.data.WikipediaImageService.placeNameFor(item)
+    }
+    val bgImageUrl by androidx.compose.runtime.produceState<String?>(
+        initialValue = item.imageUrl?.takeIf { it.isNotBlank() },
+        item.imageUrl, placeName, destination
+    ) {
+        val stored = item.imageUrl?.takeIf { it.isNotBlank() }
+        value = stored ?: placeName?.let {
+            // Generic travel photo only when no specific image can be found for this place.
+            com.example.tripmate.data.WikipediaImageService.imageForPlace(it, destination)
+                ?: com.example.tripmate.data.WikipediaImageService.FALLBACK_IMAGE_URL
+        }
+    }
 
     Row(modifier = modifier.fillMaxWidth()) {
         // Timeline node + connector line
@@ -396,19 +413,23 @@ fun TimelineItemRow(
         Card(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = Dimens.md, bottom = Dimens.lg),
+                .padding(start = Dimens.md, bottom = Dimens.lg)
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
             shape = RoundedCornerShape(Dimens.radiusLg),
+            border = if (isSelected) androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
                 // Background destination/activity photo
-                AsyncImage(
-                    model = bgImageUrl,
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.matchParentSize()
-                )
+                bgImageUrl?.let { url ->
+                    AsyncImage(
+                        model = url,
+                        contentDescription = item.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize()
+                    )
+                }
 
                 // High contrast dark gradient scrim
                 Box(
@@ -767,228 +788,27 @@ fun EditItineraryItemDialog(
         },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = {
-                onSave(item.copy(title = title, time = time, durationLabel = duration, costLabel = cost))
+                val renamed = title.trim() != item.title
+                // A renamed activity is a different place: drop the old location so it is re-geocoded.
+                onSave(
+                    item.copy(
+                        title = title,
+                        time = time,
+                        durationLabel = duration,
+                        costLabel = cost,
+                        placeName = if (renamed) null else item.placeName,
+                        imageUrl = if (renamed) null else item.imageUrl,
+                        placeDetails = if (renamed) {
+                            item.placeDetails?.copy(latitude = null, longitude = null)
+                        } else item.placeDetails
+                    )
+                )
             }) { Text("Save") }
         },
         dismissButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
-}
-
-@Composable
-fun InteractiveMapTab(
-    destination: String,
-    day: ItineraryDay,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val items = day.items
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Dimens.md)
-    ) {
-        // Interactive route overview card
-        Card(
-            shape = RoundedCornerShape(Dimens.radiusLg),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(Dimens.md)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Route for Day ${day.dayNumber}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "${items.size} pinned stops in $destination",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    FilledTonalButton(
-                        onClick = {
-                            val gmmIntentUri = android.net.Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${android.net.Uri.encode(items.lastOrNull()?.title ?: destination)}")
-                            val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, gmmIntentUri)
-                            try {
-                                context.startActivity(mapIntent)
-                            } catch (_: Exception) {
-                                val browserIntent = android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=${android.net.Uri.encode(destination)}")
-                                )
-                                context.startActivity(browserIntent)
-                            }
-                        },
-                        contentPadding = PaddingValues(horizontal = Dimens.md, vertical = Dimens.xs)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.OpenInNew,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Open Map", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-        }
-
-        // Stops sequence with distance/travel indicators
-        items.forEachIndexed { index, item ->
-            Card(
-                shape = RoundedCornerShape(Dimens.radiusMd),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        val geoUri = android.net.Uri.parse("geo:0,0?q=${android.net.Uri.encode("${item.title}, $destination")}")
-                        val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, geoUri)
-                        try {
-                            context.startActivity(mapIntent)
-                        } catch (_: Exception) {
-                            val browserIntent = android.content.Intent(
-                                android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=${android.net.Uri.encode("${item.title}, $destination")}")
-                            )
-                            context.startActivity(browserIntent)
-                        }
-                    }
-            ) {
-                Row(
-                    modifier = Modifier.padding(Dimens.md),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "${index + 1}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(Dimens.md))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = item.time,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        item.placeDetails?.let { details ->
-                            Row(
-                                modifier = Modifier.padding(top = Dimens.xs),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Filled.Star,
-                                        contentDescription = null,
-                                        tint = Color(0xFFFFB800),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Text(
-                                        text = String.format(java.util.Locale.US, "%.1f", details.rating),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = " (${details.reviewCount})",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                if (details.openingHours.isNotBlank()) {
-                                    Text(
-                                        text = details.openingHours,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.tertiary
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Icon(
-                        imageVector = Icons.Filled.Place,
-                        contentDescription = "Pin on map",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-
-            // Connecting travel leg line
-            if (index < items.lastIndex) {
-                val leg = item.travelToNext
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 28.dp, top = 2.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(2.dp)
-                            .height(26.dp)
-                            .background(MaterialTheme.colorScheme.outlineVariant)
-                    )
-                    Spacer(modifier = Modifier.width(Dimens.md))
-                    Surface(
-                        shape = RoundedCornerShape(Dimens.radiusFull),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.DirectionsWalk,
-                                contentDescription = null,
-                                modifier = Modifier.size(12.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (leg != null) "${leg.distanceLabel} • ${leg.durationLabel} (${leg.transportMode})" else "~10-15 min travel",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable

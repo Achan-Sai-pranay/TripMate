@@ -56,8 +56,16 @@ data class ItineraryItem(
     val imageUrl: String? = null,
     val isFixed: Boolean = false,
     val placeDetails: PlaceDetails? = null,
-    val travelToNext: TravelLeg? = null
-)
+    val travelToNext: TravelLeg? = null,
+    /**
+     * Real, geocodable name of the place (e.g. "Fort Aguada"). null = use [title];
+     * blank = a generic activity with no map location (e.g. "Free time").
+     */
+    val placeName: String? = null
+) {
+    val geocodeQuery: String? get() = (placeName ?: title).trim().takeIf { it.isNotBlank() }
+    val hasCoordinates: Boolean get() = placeDetails?.latitude != null && placeDetails.longitude != null
+}
 
 enum class ItineraryTab(val label: String) {
     ITINERARY("Itinerary"),

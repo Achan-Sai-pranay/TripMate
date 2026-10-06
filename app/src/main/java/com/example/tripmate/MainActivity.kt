@@ -20,6 +20,24 @@ import com.example.tripmate.ui.theme.TripPilotTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.tripmate.data.WikipediaImageService.init(applicationContext)
+        // Wikimedia rejects the default OkHttp user-agent (HTTP 403); identify the app, keep Coil's memory + disk caches.
+        coil.Coil.setImageLoader(
+            coil.ImageLoader.Builder(applicationContext)
+                .okHttpClient {
+                    okhttp3.OkHttpClient.Builder()
+                        .addInterceptor { chain ->
+                            chain.proceed(
+                                chain.request().newBuilder()
+                                    .header("User-Agent", "TripMateApp/1.0 (Android; Contact: support@tripmate.app)")
+                                    .build()
+                            )
+                        }
+                        .build()
+                }
+                .crossfade(true)
+                .build()
+        )
         enableEdgeToEdge()
         setContent {
             TripPilotApp()
