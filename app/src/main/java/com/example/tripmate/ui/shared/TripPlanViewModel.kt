@@ -459,6 +459,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
 
     fun updateDay(dayIndex: Int, newItems: List<ItineraryItem>) {
         val plan = _tripPlan.value ?: return
+        if (dayIndex !in plan.days.indices) return
         val updatedDays = plan.days.toMutableList().also { list ->
             list[dayIndex] = list[dayIndex].copy(items = newItems)
         }

@@ -281,7 +281,12 @@ private fun TimeSelectionCard(
     }
 
     if (showPicker) {
-        val timeState = rememberTimePickerState(is24Hour = false)
+        val (initHour, initMinute) = remember(value) { parseTimeString(value) }
+        val timeState = rememberTimePickerState(
+            initialHour = initHour,
+            initialMinute = initMinute,
+            is24Hour = false
+        )
         Dialog(onDismissRequest = { showPicker = false }) {
             Card(shape = RoundedCornerShape(Dimens.radiusCard)) {
                 Column(modifier = Modifier.padding(Dimens.lg), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -298,6 +303,21 @@ private fun TimeSelectionCard(
                 }
             }
         }
+    }
+}
+
+private fun parseTimeString(timeStr: String): Pair<Int, Int> {
+    return try {
+        val parts = timeStr.trim().split(" ")
+        val timeParts = parts[0].split(":")
+        var h = timeParts[0].toInt()
+        val m = timeParts[1].toInt()
+        val amPm = parts.getOrNull(1)?.uppercase() ?: "AM"
+        if (amPm == "PM" && h < 12) h += 12
+        if (amPm == "AM" && h == 12) h = 0
+        h to m
+    } catch (_: Exception) {
+        9 to 0
     }
 }
 

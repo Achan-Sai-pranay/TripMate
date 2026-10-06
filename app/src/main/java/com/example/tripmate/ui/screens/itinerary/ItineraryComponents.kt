@@ -57,7 +57,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Place
@@ -853,12 +855,14 @@ fun BudgetBreakdownView(
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = Dimens.md),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Canvas(modifier = Modifier.size(130.dp)) {
-                            val strokeWidth = 22.dp.toPx()
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(end = Dimens.md)
+                    ) {
+                        Canvas(modifier = Modifier.size(120.dp)) {
+                            val strokeWidth = 20.dp.toPx()
                             if (totalSpent == 0 || categoryTotals.isEmpty()) {
                                 drawArc(
                                     color = Color.LightGray.copy(alpha = 0.4f),
@@ -888,13 +892,17 @@ fun BudgetBreakdownView(
                         }
                     }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         categoryTotals.forEach { (cat, amount) ->
                             val pct = if (totalSpent > 0) (amount * 100 / totalSpent) else 0
                             val isSelected = selectedCategoryFilter == cat
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
+                                    .fillMaxWidth()
                                     .clip(RoundedCornerShape(Dimens.radiusSm))
                                     .background(if (isSelected) categoryColor(cat).copy(alpha = 0.15f) else Color.Transparent)
                                     .clickable {
@@ -907,7 +915,9 @@ fun BudgetBreakdownView(
                                 Text(
                                     text = "${cat.name.lowercase().replaceFirstChar { it.uppercase() }}: ₹$amount ($pct%)",
                                     style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -931,12 +941,13 @@ fun BudgetBreakdownView(
                         fontWeight = FontWeight.Bold
                     )
                     val maxDaySpend = (dayTotals.maxOfOrNull { it.second } ?: 1).coerceAtLeast(1)
+                    val barScrollState = rememberScrollState()
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(110.dp)
-                            .padding(top = Dimens.md),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
+                            .horizontalScroll(barScrollState)
+                            .padding(top = Dimens.md, bottom = Dimens.xs),
+                        horizontalArrangement = if (dayTotals.size <= 5) Arrangement.SpaceEvenly else Arrangement.spacedBy(Dimens.lg),
                         verticalAlignment = Alignment.Bottom
                     ) {
                         dayTotals.forEach { (dayNum, spend) ->
@@ -945,7 +956,7 @@ fun BudgetBreakdownView(
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Bottom,
-                                modifier = Modifier.weight(1f)
+                                modifier = if (dayTotals.size <= 5) Modifier.weight(1f) else Modifier.widthIn(min = 48.dp)
                             ) {
                                 Text(
                                     text = "₹$spend",
@@ -957,11 +968,18 @@ fun BudgetBreakdownView(
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Box(
                                     modifier = Modifier
-                                        .width(22.dp)
-                                        .fillMaxHeight(barFraction * 0.70f)
-                                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                                        .background(barColor)
-                                )
+                                        .height(64.dp)
+                                        .width(22.dp),
+                                    contentAlignment = Alignment.BottomCenter
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height((64 * barFraction).dp)
+                                            .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                            .background(barColor)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "D$dayNum",
@@ -975,14 +993,21 @@ fun BudgetBreakdownView(
             }
         }
 
-        // Inclusions Toggles (Stays & Dining)
-        Row(
+        // Inclusions Toggles (Stays & Dining) - stacked vertically so chips never overflow screen width
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(Dimens.xs)
         ) {
-            Text("Include in Budget:", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.sm)) {
+            Text(
+                text = "Include in Budget:",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
+            ) {
                 FilterChip(
                     selected = includeStays,
                     onClick = { includeStays = !includeStays },
@@ -1314,6 +1339,7 @@ fun EditItineraryItemDialog(
     var time by remember { mutableStateOf(item.time) }
     var duration by remember { mutableStateOf(item.durationLabel) }
     var cost by remember { mutableStateOf(item.costLabel) }
+    var selectedCategory by remember { mutableStateOf(item.category) }
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -1326,18 +1352,36 @@ fun EditItineraryItemDialog(
                     androidx.compose.material3.OutlinedTextField(value = duration, onValueChange = { duration = it }, label = { Text("Duration") }, singleLine = true, modifier = Modifier.weight(1f))
                     androidx.compose.material3.OutlinedTextField(value = cost, onValueChange = { cost = it }, label = { Text("Cost") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
+                Text("Category:", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    ExpenseCategory.values().forEach { cat ->
+                        FilterChip(
+                            selected = selectedCategory == cat,
+                            onClick = { selectedCategory = cat },
+                            label = { Text(cat.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = {
                 val renamed = title.trim() != item.title
+                val parsedCost = com.example.tripmate.util.CostParser.parseRupees(cost)
                 // A renamed activity is a different place: drop the old location so it is re-geocoded.
                 onSave(
                     item.copy(
-                        title = title,
-                        time = time,
-                        durationLabel = duration,
-                        costLabel = cost,
+                        title = title.trim(),
+                        time = time.trim(),
+                        durationLabel = duration.trim(),
+                        costLabel = cost.trim(),
+                        costAmount = parsedCost,
+                        category = selectedCategory,
                         placeName = if (renamed) null else item.placeName,
                         imageUrl = if (renamed) null else item.imageUrl,
                         placeDetails = if (renamed) {

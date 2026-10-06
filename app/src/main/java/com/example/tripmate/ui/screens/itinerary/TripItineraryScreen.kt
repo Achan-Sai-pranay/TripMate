@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -212,16 +214,17 @@ fun TripItineraryScreen(
                             onTabSelected = { selectedViewTab = it }
                         )
                     }
-                    item {
-                        DaySelector(
-                            dayNumber = currentDay.dayNumber,
-                            dateLabel = currentDay.dateLabel,
-                            onPreviousDay = { if (currentDayIndex > 0) currentDayIndex-- },
-                            onNextDay = { if (currentDayIndex < plan.days.lastIndex) currentDayIndex++ }
-                        )
-                    }
                     when (selectedViewTab) {
                         ItineraryTab.ITINERARY -> {
+                            item {
+                                DaySelector(
+                                    dayNumber = currentDay.dayNumber,
+                                    dateLabel = currentDay.dateLabel,
+                                    onPreviousDay = { if (currentDayIndex > 0) currentDayIndex-- },
+                                    onNextDay = { if (currentDayIndex < plan.days.lastIndex) currentDayIndex++ },
+                                    modifier = Modifier.padding(vertical = Dimens.xs)
+                                )
+                            }
                             item {
                                 ItineraryMapCard(
                                     destination = plan.destination,
@@ -374,12 +377,12 @@ private fun GeneratingTripState(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp),
+                .heightIn(min = 220.dp),
             shape = RoundedCornerShape(Dimens.radiusCard),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxWidth().heightIn(min = 220.dp)) {
                 val img = heroImageUrl ?: WikipediaImageService.FALLBACK_IMAGE_URL
                 AsyncImage(
                     model = img,
@@ -402,6 +405,7 @@ private fun GeneratingTripState(
                 )
                 Column(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .align(Alignment.BottomStart)
                         .padding(Dimens.lg)
                 ) {
@@ -427,7 +431,9 @@ private fun GeneratingTripState(
                         text = if (destination.isNotBlank()) "Crafting your trip to $destination" else "Crafting your personalized trip",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     AnimatedContent(
                         targetState = subtitles[subtitleIndex],

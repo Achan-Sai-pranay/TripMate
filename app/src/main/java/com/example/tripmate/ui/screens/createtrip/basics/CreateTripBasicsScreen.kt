@@ -76,7 +76,7 @@ fun CreateTripBasicsScreen(
     onNextClick: (TripBasics) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var destination by remember { mutableStateOf(initialDestination) }
+    var destination by remember(initialDestination) { mutableStateOf(initialDestination) }
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }

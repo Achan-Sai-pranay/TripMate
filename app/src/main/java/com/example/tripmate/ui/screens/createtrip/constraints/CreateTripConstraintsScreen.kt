@@ -152,9 +152,13 @@ fun CreateTripConstraintsScreen(
                     OutlinedTextField(
                         value = budgetText,
                         onValueChange = { input ->
-                            budgetText = input.filter { it.isDigit() }
-                            budgetText.toIntOrNull()?.let { value ->
-                                constraints = constraints.copy(budget = value.coerceIn(0, 10_000_000))
+                            val digits = input.filter { it.isDigit() }
+                            budgetText = digits
+                            val parsed = digits.toIntOrNull()
+                            if (parsed != null) {
+                                constraints = constraints.copy(budget = parsed.coerceIn(0, 10_000_000))
+                            } else if (digits.isEmpty()) {
+                                constraints = constraints.copy(budget = 0)
                             }
                         },
                         leadingIcon = {

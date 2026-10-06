@@ -104,7 +104,10 @@ fun TripPilotNavGraph(
                 slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
             }
         ) { backStackEntry ->
-            val prefillDestination = backStackEntry.arguments?.getString(Screen.CreateTripBasics.ARG_DESTINATION).orEmpty()
+            val rawPrefill = backStackEntry.arguments?.getString(Screen.CreateTripBasics.ARG_DESTINATION).orEmpty()
+            val prefillDestination = if (rawPrefill.isNotEmpty() && rawPrefill != "{destination}") {
+                runCatching { java.net.URLDecoder.decode(rawPrefill, "UTF-8") }.getOrDefault(rawPrefill)
+            } else ""
             CreateTripBasicsScreen(
                 initialDestination = prefillDestination,
                 onBackClick = { navController.popBackStack() },
@@ -209,7 +212,7 @@ fun TripPilotNavGraph(
                     navController.navigateToTab(Screen.Home.route)
                 },
                 onPlanNewTripClick = {
-                    navController.navigate(Screen.CreateTripBasics.route)
+                    navController.navigate(Screen.CreateTripBasics.buildRoute())
                 },
                 onAssistantClick = {
                     navController.navigateToTab(Screen.AiAssistant.route)
