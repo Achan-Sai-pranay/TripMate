@@ -65,14 +65,30 @@ import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material3.Surface
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Slider
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import com.example.tripmate.model.ItineraryDay
 import com.example.tripmate.model.ItineraryItem
 import com.example.tripmate.model.ItineraryTab
 import com.example.tripmate.model.StayOption
 import com.example.tripmate.model.DiningOption
+import com.example.tripmate.model.TripPlan
+import com.example.tripmate.model.BudgetEntry
+import com.example.tripmate.model.ExpenseCategory
 import com.example.tripmate.model.TripSummary
 import com.example.tripmate.ui.theme.Dimens
 
@@ -150,10 +166,8 @@ fun TripSummaryCard(
                         )
                     }
                 }
-            }
-
-            Column(modifier = Modifier.padding(Dimens.lg)) {
-                if (heroImages.isEmpty()) {
+            } else {
+                Column(modifier = Modifier.padding(Dimens.lg)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Filled.LocationOn,
@@ -178,65 +192,8 @@ fun TripSummaryCard(
                         text = "${trip.dateRange} • ${trip.travelerCount} Travelers",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp, bottom = Dimens.md)
+                        modifier = Modifier.padding(top = 4.dp)
                     )
-                }
-
-            // Trip Health block
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(Dimens.radiusMd))
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .border(1.dp, MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Dimens.radiusMd))
-                    .padding(Dimens.sm)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.HealthAndSafety,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Text(
-                        text = "TRIP HEALTH",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = Dimens.xs)
-                    )
-                }
-                Row(
-                    verticalAlignment = Alignment.Bottom,
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Text(
-                        text = "${trip.healthScore}",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.tertiary
-                    )
-                    Text(
-                        text = "/100",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 3.dp, start = 2.dp)
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp)
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(Dimens.radiusFull))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(trip.healthScore / 100f)
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(Dimens.radiusFull))
-                            .background(MaterialTheme.colorScheme.tertiary)
-                    )
-                }
                 }
             }
         }
@@ -367,12 +324,12 @@ fun TimelineItemRow(
     }
     val bgImageUrl by androidx.compose.runtime.produceState<String?>(
         initialValue = item.imageUrl?.takeIf { it.isNotBlank() },
-        item.imageUrl, placeName, destination
+        item.imageUrl, placeName, destination, item.wikipediaTitle
     ) {
         val stored = item.imageUrl?.takeIf { it.isNotBlank() }
         value = stored ?: placeName?.let {
-            // Generic travel photo only when no specific image can be found for this place.
-            com.example.tripmate.data.WikipediaImageService.imageForPlace(it, destination)
+            com.example.tripmate.data.WikipediaImageService.imageForPlace(it, destination, item.wikipediaTitle)
+                ?: com.example.tripmate.data.WikipediaImageService.imageForDestination(destination)
                 ?: com.example.tripmate.data.WikipediaImageService.FALLBACK_IMAGE_URL
         }
     }
@@ -421,13 +378,35 @@ fun TimelineItemRow(
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Box(modifier = Modifier.fillMaxWidth()) {
-                // Background destination/activity photo
+                // Background destination/activity photo with shimmer/gradient placeholder
                 bgImageUrl?.let { url ->
-                    AsyncImage(
+                    SubcomposeAsyncImage(
                         model = url,
                         contentDescription = item.title,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.matchParentSize()
+                        modifier = Modifier.matchParentSize(),
+                        loading = {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(
+                                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                                            listOf(Color(0xFF1E293B), Color(0xFF0F172A))
+                                        )
+                                    )
+                            )
+                        },
+                        error = {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(
+                                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                                            listOf(Color(0xFF334155), Color(0xFF1E293B))
+                                        )
+                                    )
+                            )
+                        }
                     )
                 }
 
@@ -658,31 +637,107 @@ private fun InfoChip(
     }
 }
 
+private fun categoryColor(category: ExpenseCategory): Color = when (category) {
+    ExpenseCategory.ACTIVITIES -> Color(0xFF3B82F6) // Blue
+    ExpenseCategory.FOOD -> Color(0xFFF97316)       // Orange
+    ExpenseCategory.STAY -> Color(0xFF8B5CF6)       // Purple
+    ExpenseCategory.TRANSPORT -> Color(0xFF10B981)  // Emerald
+    ExpenseCategory.SHOPPING -> Color(0xFFEC4899)   // Pink
+    ExpenseCategory.OTHER -> Color(0xFF64748B)      // Slate
+}
+
 @Composable
 fun BudgetBreakdownView(
-    days: List<com.example.tripmate.model.ItineraryDay>,
-    totalBudget: Int,
+    plan: TripPlan,
+    onUpdateBudget: (Int) -> Unit,
+    onAddExpense: (BudgetEntry) -> Unit,
+    onUpdateExpense: (BudgetEntry) -> Unit,
+    onDeleteExpense: (String) -> Unit,
+    onReplanCheaper: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val allItems = remember(days) { days.flatMap { it.items } }
-    val totalSpent = remember(allItems) { allItems.sumOf { com.example.tripmate.util.CostParser.parseRupees(it.costLabel) } }
-    val remaining = totalBudget - totalSpent
-    val progress = if (totalBudget > 0) (totalSpent.toFloat() / totalBudget).coerceIn(0f, 1f) else 0f
-    val isOverBudget = totalSpent > totalBudget
+    var includeStays by remember { mutableStateOf(true) }
+    var includeDining by remember { mutableStateOf(true) }
+    var selectedCategoryFilter by remember { mutableStateOf<ExpenseCategory?>(null) }
+    var showEditBudgetDialog by remember { mutableStateOf(false) }
+    var showAddExpenseDialog by remember { mutableStateOf(false) }
+    var editingExpense by remember { mutableStateOf<BudgetEntry?>(null) }
+
+    val itineraryItems = remember(plan.days) { plan.days.flatMap { it.items } }
+    val staysCost = remember(plan.stays, plan.travelerCount) {
+        plan.stays.sumOf { com.example.tripmate.util.CostParser.parseRupees(it.pricePerNight, plan.travelerCount) }
+    }
+    val diningCost = remember(plan.dining, plan.travelerCount) {
+        plan.dining.sumOf { com.example.tripmate.util.CostParser.parseRupees(it.priceRange, plan.travelerCount) }
+    }
+    val itineraryItemsCost = remember(itineraryItems, plan.travelerCount) {
+        itineraryItems.sumOf { item ->
+            if (item.costAmount > 0) item.costAmount else com.example.tripmate.util.CostParser.parseRupees(item.costLabel, plan.travelerCount)
+        }
+    }
+    val customExpensesCost = remember(plan.customExpenses) {
+        plan.customExpenses.sumOf { it.amount }
+    }
+
+    val totalSpent = itineraryItemsCost + customExpensesCost +
+            (if (includeStays) staysCost else 0) +
+            (if (includeDining) diningCost else 0)
+
+    val remaining = plan.budget - totalSpent
+    val isOverBudget = totalSpent > plan.budget
+    val progress = if (plan.budget > 0) (totalSpent.toFloat() / plan.budget).coerceIn(0f, 1f) else 0f
+
+    val categoryTotals = remember(itineraryItems, plan.customExpenses, includeStays, includeDining, staysCost, diningCost, plan.travelerCount) {
+        val map = ExpenseCategory.values().associateWith { 0 }.toMutableMap()
+        itineraryItems.forEach { item ->
+            val amt = if (item.costAmount > 0) item.costAmount else com.example.tripmate.util.CostParser.parseRupees(item.costLabel, plan.travelerCount)
+            map[item.category] = (map[item.category] ?: 0) + amt
+        }
+        plan.customExpenses.forEach { exp ->
+            map[exp.category] = (map[exp.category] ?: 0) + exp.amount
+        }
+        if (includeStays) {
+            map[ExpenseCategory.STAY] = (map[ExpenseCategory.STAY] ?: 0) + staysCost
+        }
+        if (includeDining) {
+            map[ExpenseCategory.FOOD] = (map[ExpenseCategory.FOOD] ?: 0) + diningCost
+        }
+        map.filterValues { it > 0 }
+    }
+
+    val dayTotals = remember(plan.days, plan.customExpenses, plan.travelerCount) {
+        plan.days.map { day ->
+            val dayItemsCost = day.items.sumOf { item ->
+                if (item.costAmount > 0) item.costAmount else com.example.tripmate.util.CostParser.parseRupees(item.costLabel, plan.travelerCount)
+            }
+            val dayCustomCost = plan.customExpenses.filter { it.dayNumber == day.dayNumber }.sumOf { it.amount }
+            day.dayNumber to (dayItemsCost + dayCustomCost)
+        }
+    }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Dimens.lg)) {
+        // Total Budget Card with pencil edit button
         Card(
             shape = RoundedCornerShape(Dimens.radiusCard),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(modifier = Modifier.padding(Dimens.lg)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column {
-                        Text("Total Spent", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
-                            "\u20B9$totalSpent",
+                            "Total Spent",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "₹$totalSpent",
                             style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
                             color = if (isOverBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -693,12 +748,14 @@ fun BudgetBreakdownView(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            "\u20B9${kotlin.math.abs(remaining)}",
+                            "₹${kotlin.math.abs(remaining)}",
                             style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
                             color = if (isOverBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary
                         )
                     }
                 }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -715,24 +772,280 @@ fun BudgetBreakdownView(
                             .background(if (isOverBudget) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary)
                     )
                 }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "of ₹${plan.budget} budget",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    IconButton(
+                        onClick = { showEditBudgetDialog = true },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = "Edit Budget",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Over-budget banner with Replan cheaper action
+        if (isOverBudget) {
+            Card(
+                shape = RoundedCornerShape(Dimens.radiusMd),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(Dimens.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = Dimens.sm)) {
+                        Text(
+                            text = "Over budget by ₹${totalSpent - plan.budget}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = "TripPilot can suggest free or budget alternatives.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                    FilledTonalButton(
+                        onClick = onReplanCheaper,
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                    ) {
+                        Icon(Icons.Filled.AutoFixHigh, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Replan")
+                    }
+                }
+            }
+        }
+
+        // Donut / Pie Chart by category
+        Card(
+            shape = RoundedCornerShape(Dimens.radiusCard),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(Dimens.md)) {
                 Text(
-                    text = "of \u20B9$totalBudget budget",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
+                    text = "Spending by Category",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = Dimens.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Canvas(modifier = Modifier.size(130.dp)) {
+                            val strokeWidth = 22.dp.toPx()
+                            if (totalSpent == 0 || categoryTotals.isEmpty()) {
+                                drawArc(
+                                    color = Color.LightGray.copy(alpha = 0.4f),
+                                    startAngle = 0f,
+                                    sweepAngle = 360f,
+                                    useCenter = false,
+                                    style = Stroke(width = strokeWidth)
+                                )
+                            } else {
+                                var currentAngle = -90f
+                                categoryTotals.forEach { (cat, amount) ->
+                                    val sweep = (amount.toFloat() / totalSpent.toFloat()) * 360f
+                                    drawArc(
+                                        color = categoryColor(cat),
+                                        startAngle = currentAngle,
+                                        sweepAngle = sweep,
+                                        useCenter = false,
+                                        style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                                    )
+                                    currentAngle += sweep
+                                }
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("₹$totalSpent", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        categoryTotals.forEach { (cat, amount) ->
+                            val pct = if (totalSpent > 0) (amount * 100 / totalSpent) else 0
+                            val isSelected = selectedCategoryFilter == cat
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(Dimens.radiusSm))
+                                    .background(if (isSelected) categoryColor(cat).copy(alpha = 0.15f) else Color.Transparent)
+                                    .clickable {
+                                        selectedCategoryFilter = if (isSelected) null else cat
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(categoryColor(cat)))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "${cat.name.lowercase().replaceFirstChar { it.uppercase() }}: ₹$amount ($pct%)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Daily Spending Bar Chart
+        if (dayTotals.isNotEmpty()) {
+            Card(
+                shape = RoundedCornerShape(Dimens.radiusCard),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(Dimens.md)) {
+                    Text(
+                        text = "Daily Spending",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    val maxDaySpend = (dayTotals.maxOfOrNull { it.second } ?: 1).coerceAtLeast(1)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(110.dp)
+                            .padding(top = Dimens.md),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        dayTotals.forEach { (dayNum, spend) ->
+                            val barFraction = (spend.toFloat() / maxDaySpend.toFloat()).coerceIn(0.08f, 1f)
+                            val barColor = com.example.tripmate.ui.components.dayColorFor(dayNum)
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Bottom,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "₹$spend",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .width(22.dp)
+                                        .fillMaxHeight(barFraction * 0.70f)
+                                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                        .background(barColor)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "D$dayNum",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Inclusions Toggles (Stays & Dining)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Include in Budget:", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.sm)) {
+                FilterChip(
+                    selected = includeStays,
+                    onClick = { includeStays = !includeStays },
+                    label = { Text("Stays (₹$staysCost)") }
+                )
+                FilterChip(
+                    selected = includeDining,
+                    onClick = { includeDining = !includeDining },
+                    label = { Text("Dining (₹$diningCost)") }
                 )
             }
         }
 
-        Text("Breakdown by Activity", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        // Action Header: Filter indication + Add Expense button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (selectedCategoryFilter != null) "Category: ${selectedCategoryFilter!!.name}" else "Itemized Breakdown",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            FilledTonalButton(
+                onClick = { showAddExpenseDialog = true },
+                contentPadding = PaddingValues(horizontal = Dimens.md, vertical = Dimens.xs)
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Add Expense")
+            }
+        }
 
+        // Filtered / Grouped Itemized List
         Card(
             shape = RoundedCornerShape(Dimens.radiusMd),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column {
-                allItems.forEachIndexed { index, item ->
+                val filteredItems = itineraryItems.filter {
+                    selectedCategoryFilter == null || it.category == selectedCategoryFilter
+                }
+                val filteredCustom = plan.customExpenses.filter {
+                    selectedCategoryFilter == null || it.category == selectedCategoryFilter
+                }
+
+                if (filteredItems.isEmpty() && filteredCustom.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(Dimens.lg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No expenses in this category.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                filteredItems.forEachIndexed { index, item ->
+                    val amt = if (item.costAmount > 0) item.costAmount else com.example.tripmate.util.CostParser.parseRupees(item.costLabel, plan.travelerCount)
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(Dimens.md),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -742,24 +1055,253 @@ fun BudgetBreakdownView(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f).padding(end = Dimens.md)
                         ) {
-                            Icon(item.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                            Text(item.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = Dimens.sm))
+                            Icon(item.icon, contentDescription = null, tint = categoryColor(item.category), modifier = Modifier.size(18.dp))
+                            Column(modifier = Modifier.padding(start = Dimens.sm)) {
+                                Text(item.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                                Text(
+                                    item.category.name.lowercase().replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         Text(
-                            text = item.costLabel,
+                            text = "₹$amt",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    if (index != allItems.lastIndex) {
+                    if (index != filteredItems.lastIndex || filteredCustom.isNotEmpty()) {
+                        androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                    }
+                }
+
+                filteredCustom.forEachIndexed { index, custom ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(Dimens.md),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f).padding(end = Dimens.md)
+                        ) {
+                            Icon(Icons.Filled.Payments, contentDescription = null, tint = categoryColor(custom.category), modifier = Modifier.size(18.dp))
+                            Column(modifier = Modifier.padding(start = Dimens.sm)) {
+                                Text(custom.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                                Text(
+                                    "${custom.category.name.lowercase().replaceFirstChar { it.uppercase() }}${custom.dayNumber?.let { " • Day $it" } ?: ""}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "₹${custom.amount}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            IconButton(onClick = { editingExpense = custom }, modifier = Modifier.size(24.dp).padding(start = 4.dp)) {
+                                Icon(Icons.Filled.Edit, contentDescription = "Edit", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                            }
+                            IconButton(onClick = { onDeleteExpense(custom.id) }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Delete", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                    if (index != filteredCustom.lastIndex) {
                         androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                     }
                 }
             }
         }
     }
+
+    if (showEditBudgetDialog) {
+        EditBudgetDialog(
+            currentBudget = plan.budget,
+            onDismiss = { showEditBudgetDialog = false },
+            onSave = onUpdateBudget
+        )
+    }
+
+    if (showAddExpenseDialog) {
+        AddOrEditExpenseDialog(
+            initialEntry = null,
+            dayCount = plan.days.size,
+            onDismiss = { showAddExpenseDialog = false },
+            onSave = onAddExpense
+        )
+    }
+
+    editingExpense?.let { entry ->
+        AddOrEditExpenseDialog(
+            initialEntry = entry,
+            dayCount = plan.days.size,
+            onDismiss = { editingExpense = null },
+            onSave = { updated ->
+                onUpdateExpense(updated)
+                editingExpense = null
+            }
+        )
+    }
+}
+
+@Composable
+private fun EditBudgetDialog(
+    currentBudget: Int,
+    onDismiss: () -> Unit,
+    onSave: (Int) -> Unit
+) {
+    var budgetValue by remember { mutableStateOf(currentBudget) }
+    var textValue by remember { mutableStateOf(currentBudget.toString()) }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit Trip Budget") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Dimens.md)) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = textValue,
+                    onValueChange = { input ->
+                        val digits = input.filter { it.isDigit() }
+                        textValue = digits
+                        digits.toIntOrNull()?.let { budgetValue = it }
+                    },
+                    label = { Text("Budget (₹)") },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "Quick Adjust: ₹$budgetValue",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Slider(
+                    value = budgetValue.toFloat().coerceIn(5_000f, 200_000f),
+                    onValueChange = {
+                        val rounded = (it / 1000).toInt() * 1000
+                        budgetValue = rounded
+                        textValue = rounded.toString()
+                    },
+                    valueRange = 5_000f..200_000f,
+                    steps = 38
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(budgetValue); onDismiss() }) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+private fun AddOrEditExpenseDialog(
+    initialEntry: BudgetEntry? = null,
+    dayCount: Int,
+    onDismiss: () -> Unit,
+    onSave: (BudgetEntry) -> Unit
+) {
+    var title by remember { mutableStateOf(initialEntry?.title ?: "") }
+    var amountText by remember { mutableStateOf(initialEntry?.amount?.toString() ?: "") }
+    var selectedCat by remember { mutableStateOf(initialEntry?.category ?: ExpenseCategory.ACTIVITIES) }
+    var selectedDay by remember { mutableStateOf(initialEntry?.dayNumber) }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initialEntry == null) "Add Custom Expense" else "Edit Expense") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Dimens.sm)) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Expense Title (e.g. Souvenirs, Taxi)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it.filter { ch -> ch.isDigit() } },
+                    label = { Text("Amount (₹)") },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text("Category:", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    ExpenseCategory.values().forEach { cat ->
+                        FilterChip(
+                            selected = selectedCat == cat,
+                            onClick = { selectedCat = cat },
+                            label = { Text(cat.name.lowercase().replaceFirstChar { it.uppercase() }) }
+                        )
+                    }
+                }
+                Text("Day (optional):", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedDay == null,
+                        onClick = { selectedDay = null },
+                        label = { Text("All Days") }
+                    )
+                    (1..dayCount).forEach { dayNum ->
+                        FilterChip(
+                            selected = selectedDay == dayNum,
+                            onClick = { selectedDay = dayNum },
+                            label = { Text("Day $dayNum") }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val amount = amountText.toIntOrNull() ?: 0
+                    if (title.isNotBlank() && amount > 0) {
+                        onSave(
+                            BudgetEntry(
+                                id = initialEntry?.id ?: java.util.UUID.randomUUID().toString(),
+                                title = title.trim(),
+                                amount = amount,
+                                category = selectedCat,
+                                dayNumber = selectedDay
+                            )
+                        )
+                        onDismiss()
+                    }
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable

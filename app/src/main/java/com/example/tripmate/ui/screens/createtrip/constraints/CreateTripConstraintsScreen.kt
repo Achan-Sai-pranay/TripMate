@@ -57,7 +57,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.tripmate.model.TransportOption
 import com.example.tripmate.model.TravelPace
 import com.example.tripmate.model.TripConstraints
 import com.example.tripmate.model.WalkingTolerance
@@ -201,33 +200,6 @@ fun CreateTripConstraintsScreen(
                 }
             }
 
-            item {
-                SectionCard {
-                    SectionTitle(icon = Icons.Filled.DirectionsBus, title = "Transportation")
-                    FlowRow(
-                        modifier = Modifier.padding(top = Dimens.md),
-                        horizontalArrangement = Arrangement.spacedBy(Dimens.sm),
-                        verticalArrangement = Arrangement.spacedBy(Dimens.sm)
-                    ) {
-                        TransportOption.entries.forEach { option ->
-                            val isSelected = option in constraints.selectedTransport
-                            ConstraintPill(
-                                label = option.label,
-                                isSelected = isSelected,
-                                onClick = {
-                                    constraints = constraints.copy(
-                                        selectedTransport = if (isSelected) {
-                                            constraints.selectedTransport - option
-                                        } else {
-                                            constraints.selectedTransport + option
-                                        }
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
-            }
 
             item {
                 SectionCard {
@@ -344,7 +316,7 @@ private fun ConstraintsTopBar(
             )
         }
         Text(
-            text = "STEP 3 OF 3",
+            text = "STEP 3 OF ${com.example.tripmate.util.Features.TOTAL_WIZARD_STEPS}",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.secondary
         )

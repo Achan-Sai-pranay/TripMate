@@ -9,44 +9,49 @@ import com.example.tripmate.data.ExpenseRepository
 import com.example.tripmate.data.GeminiApiClient
 import com.example.tripmate.data.TripHistoryRepository
 import com.example.tripmate.data.TripPlanRepository
+import com.example.tripmate.data.WikipediaImageService
+import com.example.tripmate.model.BudgetEntry
+import com.example.tripmate.model.ExpenseCategory
 import com.example.tripmate.model.ItineraryDay
 import com.example.tripmate.model.ItineraryItem
 import com.example.tripmate.model.PlaceDetails
+import com.example.tripmate.model.TravelLeg
+import com.example.tripmate.model.TravelerOption
+import com.example.tripmate.model.TripConstraints
 import com.example.tripmate.model.TripPlan
 import com.example.tripmate.model.TripPlanRequest
 import com.example.tripmate.model.TripPreferences
 import com.example.tripmate.util.ActivityIconMapper
+import com.example.tripmate.util.CostParser
 import com.example.tripmate.util.GeocodingHelper
-import com.example.tripmate.data.WikipediaImageService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.json.JSONArray
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.coroutineContext
 
 class TripPlanViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = TripPlanRepository(application)
     private val historyRepository = TripHistoryRepository(application)
-    private val expenseRepository = ExpenseRepository()
     private val authRepository = AuthRepository()
+    private val expenseRepository = ExpenseRepository()
 
     private val _request = MutableStateFlow(TripPlanRequest())
     val request: StateFlow<TripPlanRequest> = _request.asStateFlow()
 
-    private val _tripPlan = MutableStateFlow<TripPlan?>(null)
-    val tripPlan: StateFlow<TripPlan?> = _tripPlan.asStateFlow()
-
     private val _isGenerating = MutableStateFlow(false)
     val isGenerating: StateFlow<Boolean> = _isGenerating.asStateFlow()
+
+    private val _tripPlan = MutableStateFlow<TripPlan?>(null)
+    val tripPlan: StateFlow<TripPlan?> = _tripPlan.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
@@ -56,10 +61,20 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
     private var resolveJob: Job? = null
 
     init {
+        val now = System.currentTimeMillis()
+        val defaultStart = now + DAY_MILLIS
+        val defaultEnd = now + 4 * DAY_MILLIS
+        _request.value = _request.value.copy(
+            startDateMillis = defaultStart,
+            endDateMillis = defaultEnd
+        )
+        // Load the saved active trip if present.
         viewModelScope.launch {
-            _tripPlan.value = repository.load()
-            // Trips saved before map support (or interrupted lookups) get their coordinates filled in.
-            resolveMissingCoordinates()
+            val saved = repository.load()
+            if (saved != null) {
+                _tripPlan.value = saved
+                resolveMissingCoordinates()
+            }
         }
     }
 
@@ -108,7 +123,12 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun updateDestinationAndDates(destination: String, startMillis: Long, endMillis: Long, travelers: com.example.tripmate.model.TravelerOption) {
+    fun updateDestinationAndDates(
+        destination: String,
+        startMillis: Long,
+        endMillis: Long,
+        travelers: TravelerOption
+    ) {
         _request.value = _request.value.copy(
             destination = destination,
             startDateMillis = startMillis,
@@ -117,14 +137,25 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         )
     }
 
+    fun updateDestination(destination: String) {
+        _request.value = _request.value.copy(destination = destination)
+    }
+
+    fun updateDates(startMillis: Long, endMillis: Long) {
+        _request.value = _request.value.copy(startDateMillis = startMillis, endDateMillis = endMillis)
+    }
+
+    fun updateTravelers(travelers: TravelerOption) {
+        _request.value = _request.value.copy(travelers = travelers)
+    }
+
     fun presetDates(startMillis: Long, endMillis: Long) {
         _request.value = _request.value.copy(startDateMillis = startMillis, endDateMillis = endMillis)
     }
 
-    fun updateConstraints(constraints: com.example.tripmate.model.TripConstraints) {
+    fun updateConstraints(constraints: TripConstraints) {
         _request.value = _request.value.copy(
             budget = constraints.budget,
-            transport = constraints.selectedTransport,
             pace = constraints.travelPace,
             walkingTolerance = constraints.walkingTolerance,
             mustVisit = constraints.mustVisitTags,
@@ -139,6 +170,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
     fun dismissError() { _errorMessage.value = null }
 
     fun generateTrip() {
+        if (_isGenerating.value) return
         val req = _request.value
         if (req.destination.isBlank()) {
             _errorMessage.value = "No destination set — please start from Plan a New Trip."
@@ -162,36 +194,50 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 val raw = GeminiApiClient.generateJson(apiKey, prompt)
                 val rawPlan = parseTripPlan(raw, req, dateLabels)
                 val plan = reconcileFixedActivities(rawPlan, req.preferences.fixedActivities)
-                
-                val enrichedDays = plan.days.map { day ->
-                    day.copy(items = WikipediaImageService.enrichAll(day.items, req.destination))
-                }
-                val enrichedPlan = plan.copy(days = enrichedDays)
 
-                // Create Supabase trip row (non-fatal — expense tracking is a bonus feature)
-                val userId = authRepository.currentUserId()
-                val supabaseTripId = userId?.let {
+                // Show itinerary immediately so the screen transitions without awaiting image enrichment
+                _tripPlan.value = plan
+                repository.save(plan)
+                historyRepository.append(plan)
+                _isGenerating.value = false
+
+                // Enrich images in the background
+                viewModelScope.launch {
                     try {
-                        expenseRepository.createTrip(
-                            name = "${enrichedPlan.destination} Trip",
-                            destination = enrichedPlan.destination,
-                            startDate = null,
-                            endDate = null,
-                            createdBy = it
-                        )
-                    } catch (e: Exception) {
-                        null
+                        val enrichedDays = plan.days.map { day ->
+                            day.copy(items = WikipediaImageService.enrichAll(day.items, req.destination))
+                        }
+                        val current = _tripPlan.value ?: plan
+                        val enrichedPlan = current.copy(days = enrichedDays)
+                        _tripPlan.value = enrichedPlan
+                        repository.save(enrichedPlan)
+                    } catch (_: Exception) { }
+                }
+
+                // Create Supabase trip row in background (non-fatal — expense tracking is a bonus feature)
+                val userId = authRepository.currentUserId()
+                if (userId != null) {
+                    viewModelScope.launch {
+                        try {
+                            val supabaseTripId = expenseRepository.createTrip(
+                                name = "${plan.destination} Trip",
+                                destination = plan.destination,
+                                startDate = null,
+                                endDate = null,
+                                createdBy = userId
+                            )
+                            val current = _tripPlan.value ?: plan
+                            val updatedWithSupabase = current.copy(supabaseTripId = supabaseTripId)
+                            _tripPlan.value = updatedWithSupabase
+                            repository.save(updatedWithSupabase)
+                        } catch (_: Exception) { }
                     }
                 }
-                val finalPlan = enrichedPlan.copy(supabaseTripId = supabaseTripId)
-                _tripPlan.value = finalPlan
-                repository.save(finalPlan)
-                historyRepository.append(finalPlan)
+
                 // Itinerary is visible now; geocode its places in the background for the map.
                 resolveMissingCoordinates()
             } catch (e: Throwable) {
                 _errorMessage.value = e.message ?: "Couldn't generate your trip — please try again."
-            } finally {
                 _isGenerating.value = false
             }
         }
@@ -199,28 +245,25 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
 
     private fun buildPrompt(req: TripPlanRequest, dayCount: Int, dateLabels: List<String>): String {
         val travelerCount = req.travelers.value
-        val transportLabel = req.transport.joinToString(", ") { it.label }.ifBlank { "any" }
         val mustVisitLabel = req.mustVisit.joinToString(", ").ifBlank { "no specific preferences" }
         val avoidLabel = req.avoid.joinToString(", ").ifBlank { "nothing specific" }
 
         val prefs = req.preferences
         val fixedActivitiesLabel = prefs.fixedActivities.joinToString("; ").ifBlank { "none" }
         val foodLabel = prefs.foodPreferences.joinToString(", ").ifBlank { "no restrictions" }
-        val sunriseNote = if (prefs.suggestSunriseWakeup) "Flag any activity where an earlier sunrise start would be worth it." else ""
         val famousNote = if (prefs.prioritizeFamousPlaces) "Prefer famous/iconic places even if they need an earlier start or extra travel." else "Prefer convenient, nearby options over famous-but-inconvenient ones."
 
         return """
             You are an expert travel planner. Create a $dayCount-day itinerary for $travelerCount traveler(s)
             visiting ${req.destination}, dated: ${dateLabels.joinToString(", ")}.
-            Total budget: ₹${req.budget}. Preferred transport: $transportLabel.
+            Total budget: ₹${req.budget}.
             Travel pace: ${req.pace.label}. Walking tolerance: ${req.walkingTolerance.label}.
             Must include: $mustVisitLabel. Must avoid: $avoidLabel.
 
-            Daily schedule constraints: wake up around ${prefs.wakeUpTime}, start exploring around
-            ${prefs.exploreStartTime}, wrap up the day around ${prefs.dayEndTime}. Include roughly
-            ${prefs.restTimeHoursPerDay.toInt()} hour(s) of free/rest time per day. $sunriseNote $famousNote
+            Daily schedule constraints: start exploring around ${prefs.exploreStartTime}, wrap up the day around ${prefs.dayEndTime}. $famousNote
             Fixed-time commitments to schedule around: $fixedActivitiesLabel.
             Food preferences/restrictions: $foodLabel.
+            Do not add filler items like 'Wake up'/'Morning refresh'; only real activities and meals.
 
             Also provide:
             1. 3 Stays categorized by budget tiers: "Budget", "Mid-range", "Luxury", with estimated pricePerNight in ₹, location, and rating.
@@ -229,7 +272,6 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
 
             Return ONLY raw JSON (no markdown fences, no prose) matching exactly this shape:
             {
-              "healthScore": <integer 0-100 reflecting fit with budget and pace>,
               "days": [
                 {
                   "dayNumber": 1,
@@ -239,8 +281,11 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                       "title": "...",
                       "durationLabel": "1.5h",
                       "costLabel": "₹300",
+                      "costAmount": 300,
+                      "category": "ACTIVITIES",
                       "whyThis": "one short sentence",
                       "placeName": "real, searchable name of the specific place or venue, e.g. Fort Aguada (null for generic activities such as free time or hotel check-in)",
+                      "wikipediaTitle": "exact Wikipedia article title if known, e.g. Fort Aguada (or null)",
                       "placeDetails": { "rating": 4.6, "reviewCount": 2400, "openingHours": "09:00 AM - 05:30 PM" },
                       "travelToNext": { "distanceLabel": "1.8 km", "durationLabel": "8 mins", "transportMode": "Drive" }
                     }
@@ -262,7 +307,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
     private fun parseTripPlan(raw: String, req: TripPlanRequest, dateLabels: List<String>): TripPlan {
         val cleaned = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
         val json = JSONObject(cleaned)
-        val healthScore = json.optInt("healthScore", 80)
+        val travelerCount = req.travelers.value.toIntOrNull() ?: 1
         val daysJson = json.getJSONArray("days")
 
         val days = (0 until daysJson.length()).map { dayIndex ->
@@ -271,35 +316,51 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
             val items = (0 until itemsJson.length()).map { i ->
                 val itemObj = itemsJson.getJSONObject(i)
                 val title = itemObj.getString("title")
+                val costLabel = itemObj.optString("costLabel", "₹0")
 
                 val placeDetails = itemObj.optJSONObject("placeDetails")?.let { p ->
-                    com.example.tripmate.model.PlaceDetails(
+                    PlaceDetails(
                         rating = p.optDouble("rating", 4.5),
                         reviewCount = p.optInt("reviewCount", 1200),
                         openingHours = p.optString("openingHours", "9:00 AM - 6:00 PM")
                     )
-                } ?: com.example.tripmate.model.PlaceDetails()
+                } ?: PlaceDetails()
 
                 val travelToNext = itemObj.optJSONObject("travelToNext")?.let { t ->
-                    com.example.tripmate.model.TravelLeg(
+                    TravelLeg(
                         distanceLabel = t.optString("distanceLabel", "2.1 km"),
                         durationLabel = t.optString("durationLabel", "12 mins"),
                         transportMode = t.optString("transportMode", "Drive")
                     )
                 }
 
+                val parsedCostAmount = if (itemObj.has("costAmount")) {
+                    itemObj.getInt("costAmount")
+                } else {
+                    CostParser.parseRupees(costLabel, travelerCount = travelerCount)
+                }
+
+                val parsedCategory = itemObj.optString("category").takeIf { it.isNotBlank() }?.let { catStr ->
+                    runCatching { ExpenseCategory.valueOf(catStr) }.getOrNull()
+                } ?: ActivityIconMapper.categoryFor(title)
+
+                val wikipediaTitle = itemObj.optString("wikipediaTitle").takeIf { it.isNotBlank() && it != "null" }
+
                 ItineraryItem(
                     time = itemObj.getString("time"),
                     title = title,
                     durationLabel = itemObj.optString("durationLabel", "1h"),
-                    costLabel = itemObj.optString("costLabel", "₹0"),
+                    costLabel = costLabel,
+                    costAmount = parsedCostAmount,
+                    category = parsedCategory,
                     whyThis = itemObj.optString("whyThis", ""),
                     icon = ActivityIconMapper.iconFor(title),
                     placeDetails = placeDetails,
                     travelToNext = travelToNext,
                     placeName = if (itemObj.has("placeName")) {
                         if (itemObj.isNull("placeName")) "" else itemObj.optString("placeName").takeIf { it != "null" } ?: ""
-                    } else null
+                    } else null,
+                    wikipediaTitle = wikipediaTitle
                 )
             }
             ItineraryDay(
@@ -342,8 +403,8 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         return TripPlan(
             destination = req.destination,
             dateRangeLabel = if (startLabel == endLabel) startLabel else "$startLabel - $endLabel",
-            travelerCount = req.travelers.value.toIntOrNull() ?: 1,
-            healthScore = healthScore,
+            travelerCount = travelerCount,
+            healthScore = 0,
             budget = req.budget,
             days = days,
             stays = stays,
@@ -382,6 +443,8 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 title = fixedText,
                 durationLabel = "1h",
                 costLabel = "₹0",
+                costAmount = 0,
+                category = ActivityIconMapper.categoryFor(fixedText),
                 whyThis = "You added this as a fixed commitment — tap Edit to set the exact time.",
                 icon = ActivityIconMapper.iconFor(fixedText),
                 isFixed = true
@@ -403,6 +466,36 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         _tripPlan.value = updatedPlan
         viewModelScope.launch { repository.save(updatedPlan) }
         resolveMissingCoordinates()
+    }
+
+    fun updateBudget(newBudget: Int) {
+        val plan = _tripPlan.value ?: return
+        val updatedPlan = plan.copy(budget = newBudget)
+        _tripPlan.value = updatedPlan
+        viewModelScope.launch { repository.save(updatedPlan) }
+    }
+
+    fun addExpense(entry: BudgetEntry) {
+        val plan = _tripPlan.value ?: return
+        val updatedPlan = plan.copy(customExpenses = plan.customExpenses + entry)
+        _tripPlan.value = updatedPlan
+        viewModelScope.launch { repository.save(updatedPlan) }
+    }
+
+    fun updateExpense(entry: BudgetEntry) {
+        val plan = _tripPlan.value ?: return
+        val updatedExpenses = plan.customExpenses.map { if (it.id == entry.id) entry else it }
+        val updatedPlan = plan.copy(customExpenses = updatedExpenses)
+        _tripPlan.value = updatedPlan
+        viewModelScope.launch { repository.save(updatedPlan) }
+    }
+
+    fun deleteExpense(entryId: String) {
+        val plan = _tripPlan.value ?: return
+        val updatedExpenses = plan.customExpenses.filterNot { it.id == entryId }
+        val updatedPlan = plan.copy(customExpenses = updatedExpenses)
+        _tripPlan.value = updatedPlan
+        viewModelScope.launch { repository.save(updatedPlan) }
     }
 
     fun clearTrip() {

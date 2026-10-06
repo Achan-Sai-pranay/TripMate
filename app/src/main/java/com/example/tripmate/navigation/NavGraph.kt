@@ -153,40 +153,49 @@ fun TripPilotNavGraph(
             CreateTripConstraintsScreen(
                 onBackClick = { navController.popBackStack() },
                 onSkipClick = { 
-                    navController.navigate(Screen.AutoTrackStops.route)
+                    tripPlanViewModel.generateTrip()
+                    navController.navigate(Screen.TripItinerary.route) {
+                        popUpTo(Screen.Home.route) { inclusive = false }
+                    }
                 },
                 onGenerateTripClick = { constraints ->
                     tripPlanViewModel.updateConstraints(constraints)
-                    navController.navigate(Screen.AutoTrackStops.route)
+                    tripPlanViewModel.generateTrip()
+                    navController.navigate(Screen.TripItinerary.route) {
+                        popUpTo(Screen.Home.route) { inclusive = false }
+                    }
                 }
             )
         }
 
-        composable(
-            route = Screen.AutoTrackStops.route,
-            enterTransition = {
-                slideInHorizontally(tween(300)) { it } + fadeIn(tween(300))
-            },
-            exitTransition = { fadeOut(tween(200)) },
-            popExitTransition = {
-                slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
+        // Auto-tracking trip stops is parked for later (Features.TRIP_TRACKING = false)
+        if (com.example.tripmate.util.Features.TRIP_TRACKING) {
+            composable(
+                route = Screen.AutoTrackStops.route,
+                enterTransition = {
+                    slideInHorizontally(tween(300)) { it } + fadeIn(tween(300))
+                },
+                exitTransition = { fadeOut(tween(200)) },
+                popExitTransition = {
+                    slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
+                }
+            ) {
+                com.example.tripmate.ui.screens.createtrip.tracking.AutoTrackTripStopsScreen(
+                    onEnableTracking = {
+                        tripPlanViewModel.generateTrip()
+                        navController.navigate(Screen.TripItinerary.route) {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                        }
+                    },
+                    onMaybeLater = {
+                        tripPlanViewModel.generateTrip()
+                        navController.navigate(Screen.TripItinerary.route) {
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                        }
+                    },
+                    onBackClick = { navController.popBackStack() }
+                )
             }
-        ) {
-            com.example.tripmate.ui.screens.createtrip.tracking.AutoTrackTripStopsScreen(
-                onEnableTracking = {
-                    tripPlanViewModel.generateTrip()
-                    navController.navigate(Screen.TripItinerary.route) {
-                        popUpTo(Screen.Home.route) { inclusive = false }
-                    }
-                },
-                onMaybeLater = {
-                    tripPlanViewModel.generateTrip()
-                    navController.navigate(Screen.TripItinerary.route) {
-                        popUpTo(Screen.Home.route) { inclusive = false }
-                    }
-                },
-                onBackClick = { navController.popBackStack() }
-            )
         }
 
         composable(

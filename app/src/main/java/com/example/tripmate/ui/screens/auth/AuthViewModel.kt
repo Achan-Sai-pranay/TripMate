@@ -106,8 +106,20 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
      * Converts raw Supabase/Ktor exception messages into short, user-readable strings.
      */
     private fun friendlyAuthError(e: Exception): String {
+        if (e is java.net.UnknownHostException ||
+            e is java.net.SocketTimeoutException ||
+            e is java.net.ConnectException ||
+            e.cause is java.net.UnknownHostException ||
+            e.cause is java.net.SocketTimeoutException ||
+            e.cause is java.net.ConnectException
+        ) {
+            return "Can't reach the sign-in service right now — continue as guest."
+        }
         val raw = e.message ?: return "Something went wrong — please try again"
+        val lower = raw.lowercase()
         return when {
+            "unknownhost" in lower || "nxdomain" in lower || "unable to resolve host" in lower || "failed to connect" in lower || "timeout" in lower ->
+                "Can't reach the sign-in service right now — continue as guest."
             "email_not_confirmed" in raw ->
                 "Please confirm your email first — check your inbox for the verification link"
             "invalid_credentials" in raw || "Invalid login" in raw ->
@@ -120,7 +132,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 "Please enter a valid email address"
             "rate_limit" in raw || "too_many_requests" in raw ->
                 "Too many attempts — please wait a moment and try again"
-            "network" in raw.lowercase() || "unable to resolve" in raw.lowercase() ->
+            "network" in lower ->
                 "No internet connection — please check your network"
             else -> "Sign-in failed — please check your details and try again"
         }

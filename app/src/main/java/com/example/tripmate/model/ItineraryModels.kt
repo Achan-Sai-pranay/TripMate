@@ -2,11 +2,20 @@ package com.example.tripmate.model
 
 import androidx.compose.ui.graphics.vector.ImageVector
 
+enum class ExpenseCategory(val label: String) {
+    STAY("Stay"),
+    FOOD("Food & Dining"),
+    ACTIVITIES("Activities"),
+    TRANSPORT("Transport"),
+    SHOPPING("Shopping"),
+    OTHER("Other")
+}
+
 data class TripSummary(
     val destination: String,
     val dateRange: String,
     val travelerCount: Int,
-    val healthScore: Int // out of 100
+    val healthScore: Int = 0
 )
 
 data class PlaceDetails(
@@ -61,7 +70,19 @@ data class ItineraryItem(
      * Real, geocodable name of the place (e.g. "Fort Aguada"). null = use [title];
      * blank = a generic activity with no map location (e.g. "Free time").
      */
-    val placeName: String? = null
+    val placeName: String? = null,
+    /**
+     * Exact Wikipedia article title if known (for precise pageimage queries).
+     */
+    val wikipediaTitle: String? = null,
+    /**
+     * Numeric cost amount in ₹ (total for the group), serving as source of truth.
+     */
+    val costAmount: Int = 0,
+    /**
+     * Expense category for budget breakdown and analytics.
+     */
+    val category: ExpenseCategory = ExpenseCategory.ACTIVITIES
 ) {
     val geocodeQuery: String? get() = (placeName ?: title).trim().takeIf { it.isNotBlank() }
     val hasCoordinates: Boolean get() = placeDetails?.latitude != null && placeDetails.longitude != null

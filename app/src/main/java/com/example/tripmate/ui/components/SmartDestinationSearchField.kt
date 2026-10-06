@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.tripmate.data.DestinationRanker
 import com.example.tripmate.data.DestinationSearchRepository
 import com.example.tripmate.data.DestinationSuggestion
 import com.example.tripmate.ui.theme.Dimens
@@ -49,6 +51,7 @@ import com.example.tripmate.ui.theme.SubtleBorder
 import com.example.tripmate.ui.theme.TextMuted
 import com.example.tripmate.ui.theme.TextPrimary
 import com.example.tripmate.ui.theme.TextSecondary
+import kotlinx.coroutines.delay
 
 @Composable
 fun SmartDestinationSearchField(
@@ -60,18 +63,43 @@ fun SmartDestinationSearchField(
 ) {
     var suggestions by remember { mutableStateOf<List<DestinationSuggestion>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
+    var suppressNextSearch by remember { mutableStateOf(false) }
 
-    androidx.compose.runtime.LaunchedEffect(query) {
+    LaunchedEffect(query) {
+        if (suppressNextSearch) {
+            suppressNextSearch = false
+            suggestions = emptyList()
+            isSearching = false
+            return@LaunchedEffect
+        }
+
         val q = query.trim()
         if (q.isEmpty()) {
             suggestions = emptyList()
             isSearching = false
             return@LaunchedEffect
         }
+
+        // Stage 1: show offline curated matches instantly with 0 delay
+        val offlineMatches = DestinationSearchRepository.searchOffline(q)
+        suggestions = offlineMatches
+
+        // Stage 2: fetch online Photon results after 200ms debounce and merge without evicting offline
         isSearching = true
-        kotlinx.coroutines.delay(250) // Debounce typing
-        suggestions = DestinationSearchRepository.search(q)
-        isSearching = false
+        delay(200)
+        try {
+            val onlineMatches = DestinationSearchRepository.searchOnline(q)
+            if (onlineMatches.isNotEmpty()) {
+                val combined = mutableListOf<Pair<DestinationSuggestion, Boolean>>()
+                offlineMatches.forEach { combined.add(it to true) }
+                onlineMatches.forEach { combined.add(it to false) }
+                suggestions = DestinationRanker.rankAndDedupe(combined, q).take(8)
+            }
+        } catch (_: Exception) {
+            // Keep instant offline matches intact
+        } finally {
+            isSearching = false
+        }
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -96,7 +124,10 @@ fun SmartDestinationSearchField(
 
             OutlinedTextField(
                 value = query,
-                onValueChange = onQueryChange,
+                onValueChange = {
+                    suppressNextSearch = false
+                    onQueryChange(it)
+                },
                 modifier = Modifier.weight(1f),
                 placeholder = {
                     Text(
@@ -127,7 +158,11 @@ fun SmartDestinationSearchField(
                 )
             } else if (query.isNotEmpty()) {
                 IconButton(
-                    onClick = { onQueryChange("") },
+                    onClick = {
+                        suppressNextSearch = false
+                        suggestions = emptyList()
+                        onQueryChange("")
+                    },
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
@@ -152,11 +187,13 @@ fun SmartDestinationSearchField(
                     .padding(top = Dimens.xs)
             ) {
                 Column(modifier = Modifier.padding(vertical = Dimens.xs)) {
-                    suggestions.take(5).forEachIndexed { index, dest ->
+                    suggestions.take(6).forEachIndexed { index, dest ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
+                                    suppressNextSearch = true
+                                    suggestions = emptyList()
                                     onDestinationSelected(dest)
                                 }
                                 .padding(horizontal = Dimens.md, vertical = Dimens.sm),
@@ -209,7 +246,7 @@ fun SmartDestinationSearchField(
                             }
                         }
 
-                        if (index < suggestions.take(5).lastIndex) {
+                        if (index < suggestions.take(6).lastIndex) {
                             HorizontalDivider(
                                 color = Color(0xFFF1F5F9),
                                 modifier = Modifier.padding(horizontal = Dimens.md)

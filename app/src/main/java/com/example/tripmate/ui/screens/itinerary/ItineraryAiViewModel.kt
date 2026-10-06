@@ -1,16 +1,14 @@
 package com.example.tripmate.ui.screens.itinerary
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Castle
-import androidx.compose.material.icons.filled.Explore
-import androidx.compose.material.icons.filled.LocalMall
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tripmate.BuildConfig
 import com.example.tripmate.data.GeminiApiClient
+import com.example.tripmate.data.WikipediaImageService
+import com.example.tripmate.model.ExpenseCategory
 import com.example.tripmate.model.ItineraryItem
+import com.example.tripmate.util.ActivityIconMapper
+import com.example.tripmate.util.CostParser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,10 +43,11 @@ class ItineraryAiViewModel : ViewModel() {
                     Previous plan: $existing
                     Return ONLY a JSON array (no prose, no markdown fences) of 3-4 objects, each with exactly
                     these keys: "time" (e.g. "09:00 AM"), "title", "durationLabel" (e.g. "1h"),
-                    "costLabel" (e.g. "₹300"), "whyThis" (one short sentence).
+                    "costLabel" (e.g. "₹300"), "costAmount" (integer rupees), "category" ("ACTIVITIES"|"FOOD"|"STAY"|"TRANSPORT"|"SHOPPING"|"OTHER"),
+                    "placeName" (exact place name or null), "wikipediaTitle" (exact Wikipedia article title or null), "whyThis" (one short sentence).
                 """.trimIndent()
                 val raw = GeminiApiClient.generateJson(apiKey, prompt)
-                val enriched = com.example.tripmate.data.WikipediaImageService.enrichAll(parseItems(raw), destination)
+                val enriched = WikipediaImageService.enrichAll(parseItems(raw), destination)
                 onResult(enriched)
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Couldn't replan this day — please try again."
@@ -72,10 +71,12 @@ class ItineraryAiViewModel : ViewModel() {
                     You are a travel itinerary planner. Suggest ONE alternative activity to replace
                     "${item.title}" (originally at ${item.time}, ${item.durationLabel}) for a trip in $destination.
                     Return ONLY a JSON array with exactly one object with keys:
-                    "time", "title", "durationLabel", "costLabel", "whyThis".
+                    "time", "title", "durationLabel", "costLabel", "costAmount" (integer rupees),
+                    "category" ("ACTIVITIES"|"FOOD"|"STAY"|"TRANSPORT"|"SHOPPING"|"OTHER"),
+                    "placeName" (exact place name or null), "wikipediaTitle" (exact Wikipedia article title or null), "whyThis".
                 """.trimIndent()
                 val raw = GeminiApiClient.generateJson(apiKey, prompt)
-                val enriched = com.example.tripmate.data.WikipediaImageService.enrichAll(parseItems(raw), destination)
+                val enriched = WikipediaImageService.enrichAll(parseItems(raw), destination)
                 onResult(enriched.first())
             } catch (e: Exception) {
                 _errorMessage.value = e.message ?: "Couldn't find a replacement — please try again."
@@ -91,13 +92,27 @@ class ItineraryAiViewModel : ViewModel() {
         return (0 until array.length()).map { i ->
             val obj = array.getJSONObject(i)
             val title = obj.getString("title")
+            val costLabel = obj.optString("costLabel", "₹0")
+            val costAmount = if (obj.has("costAmount")) obj.getInt("costAmount") else CostParser.parseRupees(costLabel)
+            val category = obj.optString("category").takeIf { it.isNotBlank() }?.let { catStr ->
+                runCatching { ExpenseCategory.valueOf(catStr) }.getOrNull()
+            } ?: ActivityIconMapper.categoryFor(title)
+            val wikipediaTitle = obj.optString("wikipediaTitle").takeIf { it.isNotBlank() && it != "null" }
+            val placeName = if (obj.has("placeName")) {
+                if (obj.isNull("placeName")) "" else obj.optString("placeName").takeIf { it != "null" } ?: ""
+            } else null
+
             ItineraryItem(
                 time = obj.getString("time"),
                 title = title,
                 durationLabel = obj.optString("durationLabel", "1h"),
-                costLabel = obj.optString("costLabel", "₹0"),
+                costLabel = costLabel,
+                costAmount = costAmount,
+                category = category,
                 whyThis = obj.optString("whyThis", ""),
-                icon = com.example.tripmate.util.ActivityIconMapper.iconFor(title)
+                icon = ActivityIconMapper.iconFor(title),
+                placeName = placeName,
+                wikipediaTitle = wikipediaTitle
             )
         }
     }

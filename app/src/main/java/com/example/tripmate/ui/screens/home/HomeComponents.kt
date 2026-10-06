@@ -55,6 +55,16 @@ fun HomeHeader(
     userAvatarUrl: String,
     modifier: Modifier = Modifier
 ) {
+    val greeting = remember {
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        when (hour) {
+            in 4..11 -> "Good morning, Traveler \uD83D\uDC4B"
+            in 12..16 -> "Good afternoon, Traveler \uD83D\uDC4B"
+            in 17..21 -> "Good evening, Traveler \uD83D\uDC4B"
+            else -> "Good night, Traveler \uD83D\uDC4B"
+        }
+    }
+
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -62,7 +72,7 @@ fun HomeHeader(
     ) {
         Column {
             Text(
-                text = "Good evening, Traveler \uD83D\uDC4B",
+                text = greeting,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

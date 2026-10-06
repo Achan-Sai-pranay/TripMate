@@ -28,9 +28,8 @@ enum class WalkingTolerance(val label: String) {
 
 data class TripConstraints(
     val budget: Int = 25_000,
-    val selectedTransport: Set<TransportOption> = setOf(TransportOption.PUBLIC_TRANSPORT, TransportOption.WALKING),
     val travelPace: TravelPace = TravelPace.MODERATE,
     val walkingTolerance: WalkingTolerance = WalkingTolerance.MEDIUM,
-    val mustVisitTags: List<String> = listOf("Art Galleries"),
-    val avoidTags: List<String> = listOf("Crowded clubs")
+    val mustVisitTags: List<String> = emptyList(),
+    val avoidTags: List<String> = emptyList()
 )

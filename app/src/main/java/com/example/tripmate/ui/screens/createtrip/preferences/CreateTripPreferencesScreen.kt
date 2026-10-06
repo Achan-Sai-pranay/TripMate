@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,8 +33,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -55,11 +54,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.tripmate.model.TripPreferences
 import com.example.tripmate.ui.theme.Dimens
+import com.example.tripmate.util.Features
 import kotlinx.coroutines.launch
-import java.util.Calendar
 import java.util.Locale
 
-private const val TOTAL_CARDS = 8
+private const val TOTAL_CARDS = 4
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,7 +89,11 @@ fun CreateTripPreferencesScreen(
                 }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
                 }
-                Text("STEP 2 OF 3", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+                Text(
+                    "STEP 2 OF ${Features.TOTAL_WIZARD_STEPS}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
                 TextButton(onClick = { onDoneClick(prefs) }) {
                     Text("Skip", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
@@ -139,46 +142,26 @@ fun CreateTripPreferencesScreen(
                 verticalArrangement = Arrangement.Center
             ) {
                 when (page) {
-                    0 -> TimeQuestionCard(
-                        question = "What time do you usually wake up?",
-                        value = prefs.wakeUpTime,
-                        onValueChange = { prefs = prefs.copy(wakeUpTime = it) }
+                    0 -> DailyScheduleQuestionCard(
+                        startTime = prefs.exploreStartTime,
+                        onStartTimeChange = { prefs = prefs.copy(exploreStartTime = it) },
+                        endTime = prefs.dayEndTime,
+                        onEndTimeChange = { prefs = prefs.copy(dayEndTime = it) }
                     )
-                    1 -> TimeQuestionCard(
-                        question = "What time do you want to start exploring?",
-                        value = prefs.exploreStartTime,
-                        onValueChange = { prefs = prefs.copy(exploreStartTime = it) }
-                    )
-                    2 -> TimeQuestionCard(
-                        question = "What time do you want to end the day?",
-                        value = prefs.dayEndTime,
-                        onValueChange = { prefs = prefs.copy(dayEndTime = it) }
-                    )
-                    3 -> ToggleQuestionCard(
-                        question = "Should I suggest an ideal wake-up time for sunrise views?",
-                        subtitle = "I'll flag early activities where an earlier start is worth it.",
-                        value = prefs.suggestSunriseWakeup,
-                        onValueChange = { prefs = prefs.copy(suggestSunriseWakeup = it) }
-                    )
-                    4 -> TagQuestionCard(
+                    1 -> TagQuestionCard(
                         question = "Any fixed-time activities or reservations?",
                         placeholder = "e.g. Dinner reservation 7 PM, Train at 4 PM",
                         tags = prefs.fixedActivities,
                         onAddTag = { tag -> prefs = prefs.copy(fixedActivities = prefs.fixedActivities + tag) },
                         onRemoveTag = { tag -> prefs = prefs.copy(fixedActivities = prefs.fixedActivities - tag) }
                     )
-                    5 -> ToggleQuestionCard(
+                    2 -> ToggleQuestionCard(
                         question = "Prioritize famous places even if they need an early start or extra travel?",
                         subtitle = "Off means I'll favor convenient, nearby options instead.",
                         value = prefs.prioritizeFamousPlaces,
                         onValueChange = { prefs = prefs.copy(prioritizeFamousPlaces = it) }
                     )
-                    6 -> SliderQuestionCard(
-                        question = "How much free/rest time do you want each day?",
-                        value = prefs.restTimeHoursPerDay,
-                        onValueChange = { prefs = prefs.copy(restTimeHoursPerDay = it) }
-                    )
-                    7 -> ChipsQuestionCard(
+                    3 -> ChipsQuestionCard(
                         question = "Any food preferences or restrictions?",
                         options = listOf("Vegetarian", "Vegan", "Halal", "Jain", "No Beef", "No Seafood", "No Restrictions"),
                         selected = prefs.foodPreferences,
@@ -233,25 +216,66 @@ private fun QuestionHeader(question: String, subtitle: String? = null) {
     }
 }
 
+@Composable
+private fun DailyScheduleQuestionCard(
+    startTime: String,
+    onStartTimeChange: (String) -> Unit,
+    endTime: String,
+    onEndTimeChange: (String) -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        QuestionHeader(
+            question = "Daily Schedule",
+            subtitle = "Set your ideal window for exploring each day."
+        )
+        Spacer(modifier = Modifier.height(Dimens.lg))
+        TimeSelectionCard(
+            label = "Start Exploring",
+            value = startTime,
+            onValueChange = onStartTimeChange
+        )
+        Spacer(modifier = Modifier.height(Dimens.md))
+        TimeSelectionCard(
+            label = "Wrap Up Day",
+            value = endTime,
+            onValueChange = onEndTimeChange
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimeQuestionCard(question: String, value: String, onValueChange: (String) -> Unit) {
+private fun TimeSelectionCard(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit
+) {
     var showPicker by remember { mutableStateOf(false) }
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        QuestionHeader(question)
-        Card(
-            onClick = { showPicker = true },
-            modifier = Modifier.fillMaxWidth().padding(top = Dimens.xl),
-            shape = RoundedCornerShape(Dimens.radiusCard),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+
+    Card(
+        onClick = { showPicker = true },
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Dimens.radiusCard),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = Dimens.lg, horizontal = Dimens.md),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Text(
                 text = value,
                 style = MaterialTheme.typography.headlineLarge,
                 color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(Dimens.xl)
+                modifier = Modifier.padding(top = Dimens.xs)
             )
         }
     }
@@ -290,42 +314,13 @@ private fun ToggleQuestionCard(question: String, subtitle: String, value: Boolea
                 .padding(horizontal = Dimens.lg, vertical = Dimens.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(if (value) "Yes, suggest it" else "No, thanks", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text(if (value) "Yes, prioritize famous" else "No, prioritize convenient", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
             Switch(
                 checked = value,
                 onCheckedChange = onValueChange,
                 colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary),
                 modifier = Modifier.padding(start = Dimens.md)
             )
-        }
-    }
-}
-
-@Composable
-private fun SliderQuestionCard(question: String, value: Float, onValueChange: (Float) -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        QuestionHeader(question)
-        Text(
-            text = "${value.toInt()} hour${if (value.toInt() == 1) "" else "s"} per day",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = Dimens.xl)
-        )
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = 0f..6f,
-            steps = 5,
-            modifier = Modifier.fillMaxWidth().padding(top = Dimens.md),
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Packed", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Very relaxed", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

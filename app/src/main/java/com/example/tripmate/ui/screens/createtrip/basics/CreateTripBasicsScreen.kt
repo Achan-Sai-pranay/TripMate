@@ -28,6 +28,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import kotlinx.coroutines.launch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -76,6 +77,7 @@ fun CreateTripBasicsScreen(
     modifier: Modifier = Modifier
 ) {
     var destination by remember { mutableStateOf(initialDestination) }
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     val dateFormat = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
     val today = remember {
@@ -177,7 +179,7 @@ fun CreateTripBasicsScreen(
                 Column {
                     StepProgressBar(
                         currentStep = 1,
-                        totalSteps = 3,
+                        totalSteps = com.example.tripmate.util.Features.TOTAL_WIZARD_STEPS,
                         modifier = Modifier.padding(bottom = Dimens.md)
                     )
                     Text(
@@ -215,7 +217,11 @@ fun CreateTripBasicsScreen(
                         query = destination,
                         onQueryChange = { destination = it },
                         onDestinationSelected = { suggestion ->
-                            destination = "${suggestion.name}, ${suggestion.country}"
+                            val dest = "${suggestion.name}, ${suggestion.country}"
+                            destination = dest
+                            coroutineScope.launch {
+                                com.example.tripmate.data.WikipediaImageService.imageForDestination(dest)
+                            }
                         },
                         placeholder = "Search destination (e.g. Goa, Paris, Manali)"
                     )

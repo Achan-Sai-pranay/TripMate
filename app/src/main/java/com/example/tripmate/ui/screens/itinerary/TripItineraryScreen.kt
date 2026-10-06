@@ -37,7 +37,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.tripmate.data.WikipediaImageService
 import com.example.tripmate.model.ItineraryDay
 import com.example.tripmate.model.ItineraryItem
 import com.example.tripmate.model.ItineraryTab
@@ -132,7 +149,10 @@ fun TripItineraryScreen(
         }
     ) { innerPadding ->
         when {
-            isGenerating -> GeneratingTripState(modifier = Modifier.padding(innerPadding))
+            isGenerating -> GeneratingTripState(
+                destination = tripRequest.destination,
+                modifier = Modifier.padding(innerPadding)
+            )
             tripPlan == null -> EmptyTripState(
                 onPlanTripClick = onPlanNewTripClick,
                 modifier = Modifier.padding(innerPadding)
@@ -151,7 +171,7 @@ fun TripItineraryScreen(
                         start = Dimens.marginMobile,
                         end = Dimens.marginMobile,
                         top = innerPadding.calculateTopPadding() + Dimens.md,
-                        bottom = innerPadding.calculateBottomPadding() + Dimens.xxl
+                        bottom = innerPadding.calculateBottomPadding() + 96.dp
                     ),
                     verticalArrangement = Arrangement.spacedBy(Dimens.lg)
                 ) {
@@ -160,8 +180,7 @@ fun TripItineraryScreen(
                             trip = TripSummary(
                                 destination = plan.destination,
                                 dateRange = plan.dateRangeLabel,
-                                travelerCount = plan.travelerCount,
-                                healthScore = plan.healthScore
+                                travelerCount = plan.travelerCount
                             ),
                             heroImages = heroImages
                         )
@@ -248,8 +267,23 @@ fun TripItineraryScreen(
                         ItineraryTab.BUDGET -> {
                             item {
                                 BudgetBreakdownView(
-                                    days = plan.days,
-                                    totalBudget = tripRequest.budget,
+                                    plan = plan,
+                                    onUpdateBudget = { newBudget -> tripPlanViewModel.updateBudget(newBudget) },
+                                    onAddExpense = { entry -> tripPlanViewModel.addExpense(entry) },
+                                    onUpdateExpense = { entry -> tripPlanViewModel.updateExpense(entry) },
+                                    onDeleteExpense = { id -> tripPlanViewModel.deleteExpense(id) },
+                                    onReplanCheaper = {
+                                        val currentDay = plan.days.getOrNull(currentDayIndex) ?: plan.days.firstOrNull()
+                                        if (currentDay != null) {
+                                            aiViewModel.replanDay(
+                                                destination = plan.destination,
+                                                dayLabel = "Day ${currentDay.dayNumber} (${currentDay.dateLabel}) - low budget alternatives",
+                                                currentItems = currentDay.items
+                                            ) { newItems ->
+                                                tripPlanViewModel.updateDay(currentDayIndex, newItems)
+                                            }
+                                        }
+                                    },
                                     modifier = Modifier.padding(top = Dimens.sm)
                                 )
                             }
@@ -284,15 +318,6 @@ fun TripItineraryScreen(
                             }
                         }
                     }
-                    item {
-                        DaySelector(
-                            dayNumber = currentDay.dayNumber,
-                            dateLabel = currentDay.dateLabel,
-                            onPreviousDay = { if (currentDayIndex > 0) currentDayIndex-- },
-                            onNextDay = { if (currentDayIndex < plan.days.lastIndex) currentDayIndex++ },
-                            modifier = Modifier.padding(top = Dimens.md, bottom = 80.dp) // extra bottom padding for FAB/nav
-                        )
-                    }
                 }
                 
                 editingItem?.let { (index, item) ->
@@ -312,30 +337,117 @@ fun TripItineraryScreen(
 }
 
 @Composable
-private fun GeneratingTripState(modifier: Modifier = Modifier) {
+private fun GeneratingTripState(
+    destination: String,
+    modifier: Modifier = Modifier
+) {
+    var heroImageUrl by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(destination) {
+        if (destination.isNotBlank()) {
+            heroImageUrl = WikipediaImageService.imageForDestination(destination)
+        }
+    }
+
+    val subtitles = remember {
+        listOf(
+            "Finding hidden gems…",
+            "Mapping the best routes…",
+            "Checking opening hours…",
+            "Curating local delicacies…",
+            "Personalizing your schedule…"
+        )
+    }
+    var subtitleIndex by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(2500)
+            subtitleIndex = (subtitleIndex + 1) % subtitles.size
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = Dimens.marginMobile, vertical = Dimens.lg)
+            .padding(horizontal = Dimens.marginMobile, vertical = Dimens.md)
             .verticalScroll(androidx.compose.foundation.rememberScrollState())
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = Dimens.md)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp),
+            shape = RoundedCornerShape(Dimens.radiusCard),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(20.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = "TripPilot AI is curating your personalized itinerary…",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = Dimens.sm)
-            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                val img = heroImageUrl ?: WikipediaImageService.FALLBACK_IMAGE_URL
+                AsyncImage(
+                    model = img,
+                    contentDescription = destination,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black.copy(alpha = 0.35f),
+                                    Color.Black.copy(alpha = 0.65f),
+                                    Color.Black.copy(alpha = 0.90f)
+                                )
+                            )
+                        )
+                )
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(Dimens.lg)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = Dimens.xs)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(Dimens.xs))
+                        Text(
+                            text = "AI ITINERARY GENERATOR",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                    Text(
+                        text = if (destination.isNotBlank()) "Crafting your trip to $destination" else "Crafting your personalized trip",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    AnimatedContent(
+                        targetState = subtitles[subtitleIndex],
+                        transitionSpec = {
+                            fadeIn(animationSpec = tween(400)) togetherWith fadeOut(animationSpec = tween(400))
+                        },
+                        label = "subtitleCrossfade"
+                    ) { text ->
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
         }
+
+        Spacer(modifier = Modifier.height(Dimens.lg))
         com.example.tripmate.ui.components.ItinerarySkeletonLoader(count = 5)
     }
 }

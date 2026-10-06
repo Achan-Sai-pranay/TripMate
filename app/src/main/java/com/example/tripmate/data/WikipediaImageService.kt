@@ -38,7 +38,7 @@ object WikipediaImageService {
 
     private const val TAG = "PlaceImages"
     private const val USER_AGENT = "TripMateApp/1.0 (Android; Contact: support@tripmate.app)"
-    private const val PREFS = "place_image_cache_v1"
+    private const val PREFS = "place_image_cache_v2"
 
     /** Used only when a real place genuinely has no findable photo, and for the "Plan a New Trip" card. */
     const val FALLBACK_IMAGE_URL =
@@ -52,8 +52,8 @@ object WikipediaImageService {
     private var prefs: SharedPreferences? = null
     private val memory = ConcurrentHashMap<String, String>()
     private val recentMisses = ConcurrentHashMap<String, Long>()
-    private const val MISS_TTL_MS = 10 * 60 * 1000L
-    private val lookupPermits = Semaphore(4)
+    private const val MISS_TTL_MS = 24 * 60 * 60 * 1000L // 24 hours
+    private val lookupPermits = Semaphore(2)
 
     /** Call once at startup so resolved images persist across app launches. */
     fun init(context: Context) {
@@ -118,27 +118,52 @@ object WikipediaImageService {
 
     /** Adds a destination-specific image to every place item that doesn't have one yet. */
     suspend fun enrichAll(items: List<ItineraryItem>, destination: String): List<ItineraryItem> = coroutineScope {
+        val destPhotoDeferred = async(Dispatchers.IO) { imageForDestination(destination) }
         val needed = items
             .filter { it.imageUrl.isNullOrBlank() }
-            .mapNotNull { placeNameFor(it) }
-            .distinctBy { cacheKey(it, destination) }
-        val resolved = needed.map { place ->
-            async(Dispatchers.IO) { place to imageForPlace(place, destination) }
+            .mapNotNull { item -> placeNameFor(item)?.let { Triple(it, item.wikipediaTitle, item) } }
+            .distinctBy { cacheKey(it.first, destination) }
+
+        val resolved = needed.map { (place, wikiTitle, _) ->
+            async(Dispatchers.IO) { place to imageForPlace(place, destination, wikiTitle) }
         }.awaitAll().associate { (place, url) -> cacheKey(place, destination) to url }
 
-        items.map { item ->
-            if (!item.imageUrl.isNullOrBlank()) return@map item
+        val destPhoto = destPhotoDeferred.await()
+        var resolvedCount = 0
+        var totalPlaces = 0
+
+        val enriched = items.map { item ->
+            if (!item.imageUrl.isNullOrBlank()) {
+                resolvedCount++
+                totalPlaces++
+                return@map item
+            }
             val place = placeNameFor(item) ?: return@map item
-            val url = resolved[cacheKey(place, destination)]
-            if (url == null) item else item.copy(imageUrl = url)
+            totalPlaces++
+            val url = resolved[cacheKey(place, destination)] ?: destPhoto
+            if (url != null) {
+                resolvedCount++
+                item.copy(imageUrl = url)
+            } else {
+                item
+            }
         }
+        val pct = if (totalPlaces > 0) (resolvedCount * 100 / totalPlaces) else 100
+        Log.i(TAG, "Place images for '$destination': $resolvedCount/$totalPlaces resolved ($pct%)")
+        enriched
     }
 
     /** Photo of one specific place (e.g. "Fort Aguada" in "Goa, India"), or null if none is found. */
-    suspend fun imageForPlace(placeName: String, destination: String): String? {
+    suspend fun imageForPlace(placeName: String, destination: String, wikipediaTitle: String? = null): String? {
         val place = cleanPlaceName(placeName)
         if (place.isBlank()) return null
         return cached(cacheKey(place, destination)) {
+            // 1. Direct Wikipedia article title query if provided by AI
+            if (!wikipediaTitle.isNullOrBlank()) {
+                val direct = queryWikipediaDirect(wikipediaTitle)
+                if (direct != null) return@cached direct
+            }
+
             val destCore = destinationCore(destination)
             val wiki = LinkedHashMap<String, Candidate>()
             searchWikipedia("$place $destCore", place).forEach { wiki.putIfAbsent(it.title, it) }
@@ -149,6 +174,7 @@ object WikipediaImageService {
             wikiList.firstOrNull { it.isLandscape }?.url
                 ?: searchCommons("$place $destCore", place).firstOrNull()?.url
                 ?: wikiList.firstOrNull()?.url
+                ?: searchOpenverse("$place $destCore", place)
         }
     }
 
@@ -172,7 +198,14 @@ object WikipediaImageService {
     private suspend fun cached(key: String, lookup: suspend () -> String?): String? {
         memory[key]?.let { return it }
         prefs?.getString(key, null)?.let { memory[key] = it; return it }
-        recentMisses[key]?.let { if (System.currentTimeMillis() - it < MISS_TTL_MS) return null }
+
+        val now = System.currentTimeMillis()
+        recentMisses[key]?.let { if (now - it < MISS_TTL_MS) return null }
+        val persistedMiss = prefs?.getLong("miss|$key", 0L) ?: 0L
+        if (persistedMiss > 0L && now - persistedMiss < MISS_TTL_MS) {
+            recentMisses[key] = persistedMiss
+            return null
+        }
 
         // One lookup per place at a time: concurrent requests for the same place share the result.
         val deferred = inFlight.computeIfAbsent(key) {
@@ -183,7 +216,9 @@ object WikipediaImageService {
                         memory[key] = url
                         prefs?.edit()?.putString(key, url)?.apply()
                     } else {
-                        recentMisses[key] = System.currentTimeMillis()
+                        val timestamp = System.currentTimeMillis()
+                        recentMisses[key] = timestamp
+                        prefs?.edit()?.putLong("miss|$key", timestamp)?.apply()
                         Log.i(TAG, "No specific image found for '$key'")
                     }
                     url
@@ -223,13 +258,54 @@ object WikipediaImageService {
 
     private fun getJson(url: okhttp3.HttpUrl): JSONObject? {
         val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
-        return client.newCall(request).execute().use { r ->
-            if (!r.isSuccessful) null else JSONObject(r.body?.string().orEmpty())
+        return try {
+            client.newCall(request).execute().use { r ->
+                if (r.code == 429) {
+                    val retryAfter = r.header("Retry-After")?.toLongOrNull() ?: 2L
+                    Log.w(TAG, "Wikimedia rate limit (429) on $url. Backing off ${retryAfter}s")
+                    Thread.sleep((retryAfter * 1000).coerceAtMost(4000))
+                    return null
+                }
+                if (!r.isSuccessful) null else JSONObject(r.body?.string().orEmpty())
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "HTTP request failed for $url", e)
+            null
         }
+    }
+
+    /** Direct Wikipedia article thumbnail lookup by title */
+    private fun queryWikipediaDirect(title: String): String? = try {
+        Thread.sleep(150)
+        val url = "https://en.wikipedia.org/w/api.php".toHttpUrl().newBuilder()
+            .addQueryParameter("action", "query")
+            .addQueryParameter("titles", title)
+            .addQueryParameter("redirects", "1")
+            .addQueryParameter("prop", "pageimages")
+            .addQueryParameter("piprop", "thumbnail")
+            .addQueryParameter("pithumbsize", "1000")
+            .addQueryParameter("format", "json")
+            .build()
+        val pages = getJson(url)?.optJSONObject("query")?.optJSONObject("pages")
+        var foundUrl: String? = null
+        pages?.keys()?.forEach { id ->
+            val p = pages.getJSONObject(id)
+            val thumb = p.optJSONObject("thumbnail")
+            val src = thumb?.optString("source")
+            if (!src.isNullOrBlank() && !BAD_IMAGE.containsMatchIn(src)) {
+                foundUrl = src
+                return@forEach
+            }
+        }
+        foundUrl
+    } catch (e: Exception) {
+        Log.w(TAG, "Direct Wikipedia query failed for '$title'", e)
+        null
     }
 
     /** Wikipedia articles whose title matches [place] and that have a lead image, best match first. */
     private fun searchWikipedia(query: String, place: String): List<Candidate> = try {
+        Thread.sleep(150)
         val url = "https://en.wikipedia.org/w/api.php".toHttpUrl().newBuilder()
             .addQueryParameter("action", "query")
             .addQueryParameter("generator", "search")
@@ -259,6 +335,7 @@ object WikipediaImageService {
 
     /** Landscape JPEG photos on Wikimedia Commons whose file name mentions [place]. */
     private fun searchCommons(query: String, place: String): List<Candidate> = try {
+        Thread.sleep(150)
         val url = "https://commons.wikimedia.org/w/api.php".toHttpUrl().newBuilder()
             .addQueryParameter("action", "query")
             .addQueryParameter("generator", "search")
@@ -289,5 +366,39 @@ object WikipediaImageService {
     } catch (e: Exception) {
         Log.w(TAG, "Commons search failed for '$query'", e)
         emptyList()
+    }
+
+    /** Openverse free commercial photo search fallback */
+    private fun searchOpenverse(query: String, place: String): String? {
+        return try {
+            Thread.sleep(150)
+            val url = "https://api.openverse.org/v1/images/".toHttpUrl().newBuilder()
+                .addQueryParameter("q", query)
+                .addQueryParameter("aspect_ratio", "wide")
+                .addQueryParameter("license_type", "commercial")
+                .addQueryParameter("page_size", "5")
+                .build()
+            val obj = getJson(url)
+            val results = obj?.optJSONArray("results")
+            if (results != null) {
+                for (i in 0 until results.length()) {
+                    val item = results.getJSONObject(i)
+                    val imgUrl = item.optString("url").takeIf { it.isNotBlank() } ?: item.optString("thumbnail")
+                    val itemTitle = item.optString("title")
+                    val tags = item.optJSONArray("tags")
+                    val tagStr = (0 until (tags?.length() ?: 0)).joinToString(" ") { tags?.getJSONObject(it)?.optString("name").orEmpty() }
+                    if (imgUrl.isNotBlank() && !BAD_IMAGE.containsMatchIn(imgUrl)) {
+                        val score = matchScore(place, "$itemTitle $tagStr")
+                        if (score != null && score >= 0.5) {
+                            return imgUrl
+                        }
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Openverse search failed for '$query'", e)
+            null
+        }
     }
 }
