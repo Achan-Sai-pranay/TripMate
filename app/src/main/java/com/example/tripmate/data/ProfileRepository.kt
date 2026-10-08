@@ -10,7 +10,7 @@ class ProfileRepository {
     suspend fun fetchProfile(userId: String): ProfileRow? =
         try {
             table.select { filter { eq("id", userId) } }.decodeSingleOrNull()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
 
@@ -36,7 +36,7 @@ class ProfileRepository {
                 )
             }
         } catch (_: Exception) {
-            // Best effort upsert in case trigger didn't run or table is synced
+            // Best effort upsert in case trigger didn't run
         }
     }
 }

@@ -11,23 +11,26 @@ private val Context.tripPlanDataStore by preferencesDataStore(name = "trip_plan_
 
 class TripPlanRepository(private val context: Context) {
 
-    private val tripPlanKey = stringPreferencesKey("current_trip_plan")
+    private fun planKey(userId: String?) =
+        stringPreferencesKey("current_trip_plan_${userId?.trim()?.ifBlank { "guest" } ?: "guest"}")
 
-    suspend fun save(plan: TripPlan) {
+    suspend fun save(plan: TripPlan, userId: String? = null) {
         context.tripPlanDataStore.edit { prefs ->
-            prefs[tripPlanKey] = TripPlanJson.toJson(plan).toString()
+            prefs[planKey(userId)] = TripPlanJson.toJson(plan).toString()
         }
     }
 
-    suspend fun clear() {
-        context.tripPlanDataStore.edit { prefs -> prefs.remove(tripPlanKey) }
+    suspend fun clear(userId: String? = null) {
+        context.tripPlanDataStore.edit { prefs ->
+            prefs.remove(planKey(userId))
+        }
     }
 
-    suspend fun load(): TripPlan? {
-        val raw = context.tripPlanDataStore.data.first()[tripPlanKey] ?: return null
+    suspend fun load(userId: String? = null): TripPlan? {
+        val raw = context.tripPlanDataStore.data.first()[planKey(userId)] ?: return null
         return try {
             TripPlanJson.fromJson(org.json.JSONObject(raw))
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }

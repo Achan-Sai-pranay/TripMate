@@ -12,29 +12,30 @@ private val Context.tripHistoryDataStore by preferencesDataStore(name = "trip_hi
 
 class TripHistoryRepository(private val context: Context) {
 
-    private val historyKey = stringPreferencesKey("trip_history")
+    private fun historyKey(userId: String?) =
+        stringPreferencesKey("trip_history_${userId?.trim()?.ifBlank { "guest" } ?: "guest"}")
 
-    suspend fun append(plan: TripPlan) {
-        val current = loadAll()
-        val updated = listOf(plan) + current
+    suspend fun append(plan: TripPlan, userId: String? = null) {
+        val current = loadAll(userId)
+        val updated = listOf(plan) + current.filter { it.destination != plan.destination || it.days.size != plan.days.size }
         context.tripHistoryDataStore.edit { prefs ->
-            prefs[historyKey] = JSONArray(updated.map { TripPlanJson.toJson(it) }).toString()
+            prefs[historyKey(userId)] = JSONArray(updated.map { TripPlanJson.toJson(it) }).toString()
         }
     }
 
-    suspend fun loadAll(): List<TripPlan> {
-        val raw = context.tripHistoryDataStore.data.first()[historyKey] ?: return emptyList()
+    suspend fun loadAll(userId: String? = null): List<TripPlan> {
+        val raw = context.tripHistoryDataStore.data.first()[historyKey(userId)] ?: return emptyList()
         return try {
             val array = JSONArray(raw)
             (0 until array.length()).map { i -> TripPlanJson.fromJson(array.getJSONObject(i)) }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
     }
 
-    suspend fun clearAll() {
+    suspend fun clearAll(userId: String? = null) {
         context.tripHistoryDataStore.edit { prefs ->
-            prefs.remove(historyKey)
+            prefs.remove(historyKey(userId))
         }
     }
 }

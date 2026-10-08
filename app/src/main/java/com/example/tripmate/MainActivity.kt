@@ -1,5 +1,6 @@
 package com.example.tripmate
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -12,14 +13,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.tripmate.data.SupabaseClientProvider
 import com.example.tripmate.navigation.AuthNavGraph
 import com.example.tripmate.navigation.TripPilotNavGraph
 import com.example.tripmate.ui.screens.auth.AuthViewModel
 import com.example.tripmate.ui.theme.TripPilotTheme
+import io.github.jan.supabase.auth.handleDeeplinks
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        SupabaseClientProvider.client.handleDeeplinks(intent = intent)
         com.example.tripmate.data.WikipediaImageService.init(applicationContext)
         // Wikimedia rejects the default OkHttp user-agent (HTTP 403); identify the app, keep Coil's memory + disk caches.
         coil.Coil.setImageLoader(
@@ -42,6 +46,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             TripPilotApp()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        SupabaseClientProvider.client.handleDeeplinks(intent = intent)
     }
 }
 

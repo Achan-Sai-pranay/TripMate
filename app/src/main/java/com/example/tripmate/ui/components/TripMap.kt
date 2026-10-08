@@ -192,10 +192,11 @@ fun TripMap(
         val m = map ?: return
         val list = mapped
         if (list.isEmpty()) return
-        val update = if (list.size == 1) {
+        val distinctPoints = list.map { LatLng(it.latitude!!, it.longitude!!) }.distinctBy { it.latitude to it.longitude }
+        val update = if (distinctPoints.size <= 1) {
             CameraUpdateFactory.newLatLngZoom(LatLng(list[0].latitude!!, list[0].longitude!!), 14.0)
         } else {
-            val bounds = LatLngBounds.Builder().includes(list.map { LatLng(it.latitude!!, it.longitude!!) }).build()
+            val bounds = LatLngBounds.Builder().includes(distinctPoints).build()
             val pad = (48 * context.resources.displayMetrics.density).toInt()
             CameraUpdateFactory.newLatLngBounds(bounds, pad, pad, pad, pad)
         }
@@ -262,25 +263,26 @@ fun TripMap(
 
     // MapView must follow the host lifecycle.
     DisposableEffect(lifecycleOwner, mapView) {
-        var destroyed = false
         val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_START -> mapView.onStart()
-                Lifecycle.Event.ON_RESUME -> mapView.onResume()
-                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
-                Lifecycle.Event.ON_STOP -> mapView.onStop()
-                Lifecycle.Event.ON_DESTROY -> { destroyed = true; mapView.onDestroy() }
-                else -> {}
+            runCatching {
+                when (event) {
+                    Lifecycle.Event.ON_START -> mapView.onStart()
+                    Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                    Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                    Lifecycle.Event.ON_STOP -> mapView.onStop()
+                    Lifecycle.Event.ON_DESTROY -> mapView.onDestroy()
+                    else -> {}
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            if (!destroyed) {
-                mapView.onPause()
-                mapView.onStop()
-                mapView.onDestroy()
-            }
+            // Note: Do NOT call mapView.onDestroy() here.
+            // In a LazyColumn, scrolling off-screen disposes the composable.
+            // Calling onDestroy() here destroys the native MapLibre engine while
+            // the view is being scrolled/detached, resulting in a SIGSEGV / crash.
+            runCatching { mapView.onPause() }
         }
     }
 
@@ -332,7 +334,13 @@ fun TripMap(
     }
 
     Box(modifier = modifier) {
-        AndroidView(factory = { mapView }, modifier = Modifier.matchParentSize())
+        AndroidView(
+            factory = {
+                (mapView.parent as? android.view.ViewGroup)?.removeView(mapView)
+                mapView
+            },
+            modifier = Modifier.matchParentSize()
+        )
 
         if (loadFailed && style == null) {
             Surface(

@@ -62,13 +62,70 @@ object GeocodingHelper {
         placeCache[key]?.let { return it }
 
         val area = if (destination.isNotBlank()) resolveArea(destination) else null
+        val candidates = cleanPlaceName(name)
         val point = withContext(Dispatchers.IO) {
-            searchNominatim(name, destination, area)
-                ?: searchAndroidGeocoder(context, name, destination, area)
+            for (candidate in candidates) {
+                val pt = searchNominatim(candidate, destination, area)
+                    ?: searchAndroidGeocoder(context, candidate, destination, area)
+                if (pt != null) return@withContext pt
+            }
+            null
         }
         if (point != null) placeCache[key] = point
-        else Log.w(TAG, "Could not resolve '$name' near '$destination'")
+        else Log.w(TAG, "Could not resolve '$name' near '$destination' (candidates: $candidates)")
         return point
+    }
+
+    /** Deterministic fallback coordinate near destination center if a specific venue cannot be resolved. */
+    fun fallbackPoint(rawDestination: String, index: Int = 0): GeoPoint? {
+        val destination = rawDestination.replace(Regex("""\(.*?\)"""), "").trim().lowercase(Locale.ROOT)
+        val area = areaCache[destination] ?: areaCache.values.firstOrNull() ?: return null
+        val offsetLat = ((index % 5) - 2) * 0.005
+        val offsetLng = (((index / 5) % 5) - 2) * 0.005
+        return GeoPoint(area.center.lat + offsetLat, area.center.lng + offsetLng)
+    }
+
+    fun cleanPlaceName(raw: String): List<String> {
+        val cleaned = raw.trim()
+        if (cleaned.isEmpty()) return emptyList()
+
+        val candidates = LinkedHashSet<String>()
+
+        // 1. Remove common activity prefix verbs/phrases
+        val prefixRegex = Regex(
+            """^(Breakfast\s+(at|in)\s+|Lunch\s+(at|in)\s+|Dinner\s+(at|in)\s+|Snacks?\s+(at|in)\s+|""" +
+            """Explore\s+|Visit\s+|Stroll\s+(around|at|in|through)\s+|Walk\s+(around|at|in|through)\s+|""" +
+            """Evening\s+(walk|stroll|shopping|leisure)(\s+(at|in|around))?\s+|""" +
+            """Morning\s+(walk|stroll)(\s+(at|in|around))?\s+|""" +
+            """Shopping\s+(and|&)\s+evening(\s+(at|in))?\s+|""" +
+            """Shopping\s+(at|in)\s+|Relax\s+(at|in)\s+|Sightseeing\s+(at|in|around)\s+|""" +
+            """Tour\s+of\s+|Head\s+to\s+|Trip\s+to\s+|Trek\s+to\s+|Drive\s+to\s+|Check[- ]in\s+(at|to)\s+)""",
+            RegexOption.IGNORE_CASE
+        )
+        val stripped = cleaned.replace(prefixRegex, "").trim()
+
+        val withoutParens = stripped.replace(Regex("""\(.*?\)"""), "").trim()
+        if (withoutParens.isNotBlank()) {
+            candidates.add(withoutParens)
+            // Strip apostrophes: "Ward's Lake" -> "Wards Lake"
+            if (withoutParens.contains("'") || withoutParens.contains("’")) {
+                candidates.add(withoutParens.replace("'", "").replace("’", ""))
+            }
+            // Simplify "X Museum of Y" -> "X Museum"
+            val museumMatch = Regex("""^(.*?Museum)(\s+of\s+.*)?$""", RegexOption.IGNORE_CASE).find(withoutParens)
+            if (museumMatch != null) {
+                val shortMuseum = museumMatch.groupValues[1].trim()
+                if (shortMuseum.isNotBlank() && shortMuseum != withoutParens) {
+                    candidates.add(shortMuseum)
+                }
+            }
+        }
+
+        if (cleaned.isNotBlank()) {
+            candidates.add(cleaned)
+        }
+
+        return candidates.toList()
     }
 
     private suspend fun resolveArea(destination: String): Area? {

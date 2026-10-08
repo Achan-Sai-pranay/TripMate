@@ -164,7 +164,7 @@ object TripPlanJson {
                     isFixed = itemObj.optBoolean("isFixed", false),
                     placeDetails = placeDetails,
                     travelToNext = travelLeg,
-                    placeName = if (itemObj.has("placeName")) itemObj.optString("placeName") else null,
+                    placeName = if (itemObj.has("placeName")) itemObj.optString("placeName").takeIf { it.isNotBlank() && it != "null" } else null,
                     wikipediaTitle = itemObj.optString("wikipediaTitle").takeIf { it.isNotBlank() && it != "null" }
                 )
             }

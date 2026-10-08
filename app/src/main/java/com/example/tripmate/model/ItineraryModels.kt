@@ -84,7 +84,7 @@ data class ItineraryItem(
      */
     val category: ExpenseCategory = ExpenseCategory.ACTIVITIES
 ) {
-    val geocodeQuery: String? get() = (placeName ?: title).trim().takeIf { it.isNotBlank() }
+    val geocodeQuery: String? get() = (placeName?.takeIf { it.isNotBlank() } ?: title).trim().takeIf { it.isNotBlank() }
     val hasCoordinates: Boolean get() = placeDetails?.latitude != null && placeDetails.longitude != null
 }
 

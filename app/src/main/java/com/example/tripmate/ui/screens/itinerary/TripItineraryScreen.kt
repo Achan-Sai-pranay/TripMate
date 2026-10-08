@@ -163,6 +163,12 @@ fun TripItineraryScreen(
                 val plan = tripPlan!!
                 val currentDay = plan.days.getOrNull(currentDayIndex) ?: plan.days.first()
 
+                LaunchedEffect(plan.destination) {
+                    if (plan.days.any { day -> day.items.any { !it.hasCoordinates } }) {
+                        tripPlanViewModel.resolveMissingCoordinates()
+                    }
+                }
+
                 val heroImages = remember(plan) {
                     plan.days.flatMap { it.items }.mapNotNull { it.imageUrl }.distinct()
                 }
@@ -235,11 +241,15 @@ fun TripItineraryScreen(
                                     onPinSelected = { selectedPinKey = it.key; focusToken++ }
                                 )
                             }
-                            itemsIndexed(currentDay.items, key = { _, item -> item.time + item.title }) { index, item ->
+                            itemsIndexed(
+                                items = currentDay.items,
+                                key = { index, item -> "${currentDay.dayNumber}_${index}_${item.time}_${item.title}" }
+                            ) { index, item ->
                                 val isReplacing = (item.time + item.title) == replacingItemKey
                                 val pinKey = currentDay.pinKey(index)
                                 TimelineItemRow(
                                     item = item,
+                                    nextItem = currentDay.items.getOrNull(index + 1),
                                     destination = plan.destination,
                                     isSelected = pinKey != null && pinKey == selectedPinKey,
                                     onClick = pinKey?.let { key -> { selectedPinKey = key; focusToken++ } },

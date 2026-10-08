@@ -26,7 +26,7 @@ class ExpenseRepository {
 
     /**
      * Creates a `trips` row and returns its generated UUID.
-     * Your SQL trigger auto-adds the creator as a member.
+     * Auto-adds the creator as a member.
      */
     suspend fun createTrip(
         name: String,
@@ -44,33 +44,49 @@ class ExpenseRepository {
                 createdBy = createdBy
             )
         ) { select() }.decodeSingle<TripRow>()
-        return inserted.id ?: error("Trip insert did not return an id")
+        val tripId = inserted.id ?: error("Trip insert did not return an id")
+        try {
+            members.insert(TripMemberRow(tripId = tripId, userId = createdBy))
+        } catch (_: Exception) { }
+        return tripId
     }
 
     /** Looks up a user by email and adds them as a member. Returns false if not found. */
     suspend fun inviteMemberByEmail(tripId: String, email: String): Boolean {
-        val profile = profiles
-            .select { filter { eq("email", email) } }
-            .decodeSingleOrNull<ProfileRow>() ?: return false
-        members.insert(TripMemberRow(tripId = tripId, userId = profile.id))
-        return true
+        return try {
+            val profile = profiles
+                .select { filter { eq("email", email.trim().lowercase()) } }
+                .decodeSingleOrNull<ProfileRow>() ?: return false
+            members.insert(TripMemberRow(tripId = tripId, userId = profile.id))
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     suspend fun listMembers(tripId: String): List<ProfileRow> {
-        val memberRows = members
-            .select { filter { eq("trip_id", tripId) } }
-            .decodeList<TripMemberRow>()
-        if (memberRows.isEmpty()) return emptyList()
-        val userIds = memberRows.map { it.userId }
-        return profiles.select { filter { isIn("id", userIds) } }.decodeList()
+        return try {
+            val memberRows = members
+                .select { filter { eq("trip_id", tripId) } }
+                .decodeList<TripMemberRow>()
+            if (memberRows.isEmpty()) return emptyList()
+            val userIds = memberRows.map { it.userId }
+            profiles.select { filter { isIn("id", userIds) } }.decodeList()
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
-    suspend fun listExpenses(tripId: String): List<ExpenseRow> =
-        expenses.select { filter { eq("trip_id", tripId) } }.decodeList()
+    suspend fun listExpenses(tripId: String): List<ExpenseRow> {
+        return try {
+            expenses.select { filter { eq("trip_id", tripId) } }.decodeList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
 
     /**
      * Adds one expense and immediately splits it equally among all current trip members.
-     * Equal-split only for now — custom per-person amounts are a future enhancement.
      */
     suspend fun addExpenseEqualSplit(
         tripId: String,
@@ -93,6 +109,7 @@ class ExpenseRepository {
         if (memberList.isEmpty()) return
         val share = amount / memberList.size
         val expenseId = expense.id ?: return
+
         val splitRows = memberList.map { member ->
             ExpenseSplitRow(expenseId = expenseId, userId = member.id, amountOwed = share)
         }
@@ -103,7 +120,11 @@ class ExpenseRepository {
         val memberList  = listMembers(tripId)
         val expenseList = listExpenses(tripId)
         val allSplits   = expenseList.mapNotNull { it.id }.flatMap { expenseId ->
-            splits.select { filter { eq("expense_id", expenseId) } }.decodeList<ExpenseSplitRow>()
+            try {
+                splits.select { filter { eq("expense_id", expenseId) } }.decodeList<ExpenseSplitRow>()
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
         return memberList.map { member ->
             val paid      = expenseList.filter { it.paidBy == member.id }.sumOf { it.amount }

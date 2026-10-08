@@ -93,8 +93,14 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 for ((dayIndex, day) in snapshot.days.withIndex()) {
                     for ((itemIndex, original) in day.items.withIndex()) {
                         if (original.hasCoordinates) continue
-                        val query = original.geocodeQuery?.takeIf { original.placeName?.isBlank() != true } ?: continue
-                        val point = GeocodingHelper.resolve(context, query, snapshot.destination) ?: continue
+                        val query = (original.placeName?.takeIf { it.isNotBlank() } ?: original.title).trim()
+                        if (query.isBlank()) continue
+                        val lower = query.lowercase()
+                        if (lower == "free time" || lower == "leisure" || lower == "rest" || lower == "hotel check-in" || lower == "check-in") continue
+
+                        val point = GeocodingHelper.resolve(context, query, snapshot.destination)
+                            ?: GeocodingHelper.fallbackPoint(snapshot.destination, itemIndex)
+                            ?: continue
 
                         // Re-read the plan: the user may have edited it while we were looking things up.
                         val current = _tripPlan.value ?: return@launch
@@ -358,7 +364,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                     placeDetails = placeDetails,
                     travelToNext = travelToNext,
                     placeName = if (itemObj.has("placeName")) {
-                        if (itemObj.isNull("placeName")) "" else itemObj.optString("placeName").takeIf { it != "null" } ?: ""
+                        itemObj.optString("placeName").takeIf { it.isNotBlank() && it != "null" }
                     } else null,
                     wikipediaTitle = wikipediaTitle
                 )

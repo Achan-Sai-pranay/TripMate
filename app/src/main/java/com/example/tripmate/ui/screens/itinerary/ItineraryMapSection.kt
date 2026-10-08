@@ -53,8 +53,13 @@ import com.example.tripmate.ui.theme.Dimens
 
 /** 1-based position of the item among its day's map places, or null for generic (non-place) activities. */
 fun ItineraryDay.placeOrder(itemIndex: Int): Int? {
-    if (items.getOrNull(itemIndex)?.placeName?.isBlank() == true) return null
-    return items.take(itemIndex + 1).count { it.placeName?.isBlank() != true }
+    val item = items.getOrNull(itemIndex) ?: return null
+    val t = item.title.lowercase().trim()
+    if (item.placeName.isNullOrBlank() && (t == "free time" || t == "leisure" || t == "rest" || t == "hotel check-in")) return null
+    return items.take(itemIndex + 1).count {
+        val title = it.title.lowercase().trim()
+        !it.placeName.isNullOrBlank() || (title != "free time" && title != "leisure" && title != "rest" && title != "hotel check-in")
+    }
 }
 
 fun pinKeyFor(dayNumber: Int, order: Int, title: String) = "$dayNumber#$order#$title"

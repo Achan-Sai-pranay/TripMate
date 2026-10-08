@@ -43,7 +43,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                 val userId = authRepository.currentUserId()
                 if (userId != null) {
                     val profile = profileRepository.fetchProfile(userId)
-                    _displayName.value = profile?.fullName ?: "Traveler"
+                    _displayName.value = profile?.fullName ?: authRepository.currentUserName() ?: "Traveler"
                     _email.value = profile?.email ?: authRepository.currentUserEmail().orEmpty()
                 }
             }

@@ -34,7 +34,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.DirectionsCar
+import com.example.tripmate.model.TravelLeg
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -82,7 +88,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import coil.compose.SubcomposeAsyncImage
 import com.example.tripmate.model.ItineraryDay
 import com.example.tripmate.model.ItineraryItem
 import com.example.tripmate.model.ItineraryTab
@@ -317,7 +322,8 @@ fun TimelineItemRow(
     modifier: Modifier = Modifier,
     isSelected: Boolean = false,
     onClick: (() -> Unit)? = null,
-    destination: String = ""
+    destination: String = "",
+    nextItem: ItineraryItem? = null
 ) {
     // Destination-specific photo: the item's stored image, else a cached/looked-up photo of THIS place.
     // Generic activities (breakfast, free time, check-in...) have no place and keep the plain card.
@@ -336,11 +342,17 @@ fun TimelineItemRow(
         }
     }
 
-    Row(modifier = modifier.fillMaxWidth()) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+    ) {
         // Timeline node + connector line
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.width(48.dp)
+            modifier = Modifier
+                .width(48.dp)
+                .fillMaxHeight()
         ) {
             Box(
                 modifier = Modifier
@@ -368,47 +380,29 @@ fun TimelineItemRow(
             }
         }
 
-        // Activity card with scenic background image & gradient scrim
-        Card(
+        // Right side: Activity card + Travel leg indicator
+        Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = Dimens.md, bottom = Dimens.lg)
-                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
-            shape = RoundedCornerShape(Dimens.radiusLg),
-            border = if (isSelected) androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                .padding(start = Dimens.md)
         ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+                shape = RoundedCornerShape(Dimens.radiusLg),
+                border = if (isSelected) androidx.compose.foundation.BorderStroke(3.dp, MaterialTheme.colorScheme.primary) else null,
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
             Box(modifier = Modifier.fillMaxWidth()) {
-                // Background destination/activity photo with shimmer/gradient placeholder
+                // Background destination/activity photo with gradient scrim
                 bgImageUrl?.let { url ->
-                    SubcomposeAsyncImage(
+                    AsyncImage(
                         model = url,
                         contentDescription = item.title,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.matchParentSize(),
-                        loading = {
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .background(
-                                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                                            listOf(Color(0xFF1E293B), Color(0xFF0F172A))
-                                        )
-                                    )
-                            )
-                        },
-                        error = {
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .background(
-                                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                                            listOf(Color(0xFF334155), Color(0xFF1E293B))
-                                        )
-                                    )
-                            )
-                        }
+                        modifier = Modifier.matchParentSize()
                     )
                 }
 
@@ -607,7 +601,81 @@ fun TimelineItemRow(
                 }
             }
         }
+
+        if (!isLastItem) {
+            val leg = item.travelToNext ?: computeTravelLeg(item, nextItem)
+            if (leg != null) {
+                Row(
+                    modifier = Modifier.padding(start = Dimens.xs, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(Dimens.radiusFull),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.DirectionsWalk,
+                                contentDescription = null,
+                                modifier = Modifier.size(13.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${leg.distanceLabel} • ${leg.durationLabel} (${leg.transportMode})",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            } else {
+                Spacer(modifier = Modifier.height(Dimens.sm))
+            }
+        } else {
+            Spacer(modifier = Modifier.height(Dimens.xs))
+        }
     }
+}
+}
+
+private fun computeTravelLeg(item: ItineraryItem, nextItem: ItineraryItem?): TravelLeg? {
+    if (nextItem == null) return null
+    val lat1 = item.placeDetails?.latitude ?: return null
+    val lng1 = item.placeDetails?.longitude ?: return null
+    val lat2 = nextItem.placeDetails?.latitude ?: return null
+    val lng2 = nextItem.placeDetails?.longitude ?: return null
+
+    val distKm = distanceBetweenKm(lat1, lng1, lat2, lng2)
+    val distLabel = if (distKm < 0.95) {
+        "${((distKm * 10).toInt() * 100).coerceAtLeast(100)} m"
+    } else {
+        String.format(java.util.Locale.US, "%.1f km", distKm)
+    }
+
+    val mode = if (distKm <= 1.0) "Walk" else "Drive"
+    val avgSpeed = if (mode == "Walk") 4.5 else 25.0
+    val mins = kotlin.math.max(2, (distKm / avgSpeed * 60).toInt())
+    val durationLabel = if (mins >= 60) "${mins / 60} hr ${mins % 60} mins" else "$mins mins"
+
+    return TravelLeg(
+        distanceLabel = distLabel,
+        durationLabel = durationLabel,
+        transportMode = mode
+    )
+}
+
+private fun distanceBetweenKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLng = Math.toRadians(lon2 - lon1)
+    val a = (kotlin.math.sin(dLat / 2).let { it * it } +
+            kotlin.math.cos(Math.toRadians(lat1)) * kotlin.math.cos(Math.toRadians(lat2)) *
+            kotlin.math.sin(dLng / 2).let { it * it }).coerceIn(0.0, 1.0)
+    val c = 2 * kotlin.math.atan2(kotlin.math.sqrt(a), kotlin.math.sqrt((1.0 - a).coerceIn(0.0, 1.0)))
+    return 6371.0 * c
 }
 
 @Composable

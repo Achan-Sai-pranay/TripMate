@@ -924,7 +924,7 @@ private fun CompetitorSearchingIndicator() {
 }
 
 /**
- * Compact one-row input: [+] [text field] [mic] [send], with a one-line disclaimer.
+ * Compact one-row input (add button, text field, microphone, and send button) with a one-line disclaimer.
  * Kept short on purpose so the chat and map get the vertical space.
  */
 @Composable
@@ -969,7 +969,7 @@ private fun BottomChatInputSection(
                 textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp, color = Color(0xFF0F172A)),
                 maxLines = 4,
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(PrimaryOrange),
-                decorationBox = { inner ->
+                decorationBox = { inner: @Composable () -> Unit ->
                     Box(contentAlignment = Alignment.CenterStart) {
                         if (inputText.isEmpty()) {
                             Text(

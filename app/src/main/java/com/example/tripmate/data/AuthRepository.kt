@@ -1,7 +1,10 @@
 package com.example.tripmate.data
 
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.status.SessionStatus
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -10,16 +13,18 @@ class AuthRepository {
     private val auth = SupabaseClientProvider.client.auth
 
     /** Emits [SessionStatus] — use to gate the whole app's UI. */
-    val sessionFlow = auth.sessionStatus
+    val sessionFlow: StateFlow<SessionStatus> = auth.sessionStatus
 
     fun currentUserId(): String? = auth.currentUserOrNull()?.id
     fun currentUserEmail(): String? = auth.currentUserOrNull()?.email
+    fun currentUserName(): String? =
+        auth.currentUserOrNull()?.userMetadata?.get("full_name")?.toString()?.trim('"')
+            ?: auth.currentUserOrNull()?.userMetadata?.get("name")?.toString()?.trim('"')
 
-    /**
-     * Creates the Supabase Auth user. Also attempts an immediate sign-in
-     * so that if email confirmation is disabled/auto-confirmed, the user
-     * logs in instantly without any blocker.
-     */
+    suspend fun signInWithGoogle() {
+        auth.signInWith(Google)
+    }
+
     suspend fun signUp(email: String, password: String, fullName: String, username: String): Boolean {
         auth.signUpWith(Email) {
             this.email = email
@@ -36,9 +41,8 @@ class AuthRepository {
                 this.email = email
                 this.password = password
             }
-            true // Instant sign-in succeeded
+            true
         } catch (_: Exception) {
-            // Confirmation might be strictly enforced on this Supabase project
             false
         }
     }
@@ -51,10 +55,6 @@ class AuthRepository {
     }
 
     suspend fun signOut() {
-        try {
-            auth.signOut()
-        } catch (_: Exception) {
-            // Ignore offline network errors on sign out
-        }
+        auth.signOut()
     }
 }
