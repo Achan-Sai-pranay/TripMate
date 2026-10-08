@@ -5,7 +5,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
 // Exact light color scheme mapping based on DESIGN.md
-private val TripPilotLightColorScheme = lightColorScheme(
+private val TripMateLightColorScheme = lightColorScheme(
     primary = PrimaryColor,
     onPrimary = OnPrimary,
     primaryContainer = PrimaryContainer,
@@ -51,13 +51,20 @@ private val TripPilotLightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun TripPilotTheme(
+fun TripMateTheme(
     content: @Composable () -> Unit
 ) {
     MaterialTheme(
-        colorScheme = TripPilotLightColorScheme,
-        typography = TripPilotTypography,
-        shapes = TripPilotShapes,
+        colorScheme = TripMateLightColorScheme,
+        typography = TripMateTypography,
+        shapes = TripMateShapes,
         content = content
     )
+}
+
+@Composable
+fun TripPilotTheme(
+    content: @Composable () -> Unit
+) {
+    TripMateTheme(content = content)
 }

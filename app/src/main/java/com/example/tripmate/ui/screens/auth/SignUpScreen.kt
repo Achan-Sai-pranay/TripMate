@@ -82,7 +82,7 @@ fun SignUpScreen(
         ) {
             Image(
                 painter = painterResource(id = com.example.tripmate.R.drawable.app_logo),
-                contentDescription = "TripPilot Logo",
+                contentDescription = "TripMate Logo",
                 modifier = Modifier
                     .size(64.dp)
                     .clip(RoundedCornerShape(16.dp))
@@ -94,7 +94,7 @@ fun SignUpScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
             Text(
-                text = "Join TripPilot and start planning unforgettable trips.",
+                text = "Join TripMate and start planning unforgettable trips.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = Dimens.xs, bottom = Dimens.lg)

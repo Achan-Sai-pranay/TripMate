@@ -44,7 +44,7 @@ private fun NavHostController.navigateToTab(route: String) {
 }
 
 @Composable
-fun TripPilotNavGraph(
+fun TripMateNavGraph(
     navController: NavHostController = rememberNavController()
 ) {
     val tripPlanViewModel: TripPlanViewModel = viewModel()
@@ -255,6 +255,10 @@ fun TripPilotNavGraph(
                 onAssistantClick = { navController.navigateToTab(Screen.AiAssistant.route) },
                 onSettingsClick = { navController.navigate(Screen.AccountSettings.route) },
                 onHelpClick = { navController.navigate(Screen.HelpSupport.route) },
+                onTripClick = { selectedTrip ->
+                    tripPlanViewModel.loadTrip(selectedTrip)
+                    navController.navigateToTab(Screen.TripItinerary.route)
+                },
                 onLoggedOut = {
                     // Session flow in MainActivity automatically swaps to AuthNavGraph.
                     // Clear local trip state so it's fresh for the next user.
@@ -298,4 +302,11 @@ fun TripPilotNavGraph(
             )
         }
     }
+}
+
+@Composable
+fun TripPilotNavGraph(
+    navController: NavHostController = rememberNavController()
+) {
+    TripMateNavGraph(navController = navController)
 }

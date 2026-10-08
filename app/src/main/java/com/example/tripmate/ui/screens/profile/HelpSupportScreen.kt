@@ -56,22 +56,29 @@ fun HelpSupportScreen(
                 .padding(Dimens.lg),
             verticalArrangement = Arrangement.spacedBy(Dimens.xl)
         ) {
+            val context = androidx.compose.ui.platform.LocalContext.current
             Column(verticalArrangement = Arrangement.spacedBy(Dimens.md)) {
                 Text("Frequently Asked Questions", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                FaqItem(question = "How does TripPilot generate itineraries?", answer = "We use advanced AI models to analyze your destination, budget, and preferences to build a custom schedule.")
+                FaqItem(question = "How does TripMate generate itineraries?", answer = "We use advanced AI models to analyze your destination, budget, and preferences to build a custom schedule.")
                 FaqItem(question = "Can I change my budget?", answer = "Yes! You can edit your budget in the 'Plan a Trip' flow, or directly on the Budget tab of your itinerary.")
                 FaqItem(question = "Is my data private?", answer = "All trip data is currently stored locally on your device.")
             }
             
             Column(verticalArrangement = Arrangement.spacedBy(Dimens.md), horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Text("Need more help?", style = MaterialTheme.typography.titleMedium)
-                Button(onClick = { /* no-op for now */ }) {
+                Button(onClick = {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_SENDTO).apply {
+                        data = android.net.Uri.parse("mailto:support@tripmate.app")
+                        putExtra(android.content.Intent.EXTRA_SUBJECT, "TripMate Support Request")
+                    }
+                    runCatching { context.startActivity(intent) }
+                }) {
                     Text("Contact Us")
                 }
             }
             
             Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("TripPilot App", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text("TripMate App", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                 Text("Version 1.0.0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

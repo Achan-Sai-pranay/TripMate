@@ -12,10 +12,10 @@ import com.example.tripmate.ui.screens.auth.TravelVibeScreen
 
 @Composable
 fun AuthNavGraph(
+    authViewModel: AuthViewModel = viewModel(),
     onSignedIn: () -> Unit = {}
 ) {
     val navController = rememberNavController()
-    val authViewModel: AuthViewModel = viewModel()
 
     NavHost(navController = navController, startDestination = Screen.Login.route) {
         composable(Screen.Login.route) {
@@ -28,6 +28,7 @@ fun AuthNavGraph(
             SignUpScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onInstantSignedIn = {
+                    authViewModel.startOnboarding()
                     navController.navigate(Screen.TravelVibe.route) {
                         popUpTo(Screen.SignUp.route) { inclusive = true }
                     }

@@ -94,7 +94,7 @@ fun TravelVibeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Welcome to TripPilot",
+                    text = "Welcome to TripMate",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold

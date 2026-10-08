@@ -37,6 +37,17 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    private val _isOnboarding = MutableStateFlow(false)
+    val isOnboarding: StateFlow<Boolean> = _isOnboarding.asStateFlow()
+
+    fun startOnboarding() {
+        _isOnboarding.value = true
+    }
+
+    fun finishOnboarding() {
+        _isOnboarding.value = false
+    }
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -151,8 +162,27 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun sendPasswordResetEmail(email: String) {
+        if (email.isBlank()) {
+            _errorMessage.value = "Please enter your email address"
+            return
+        }
+        _isLoading.value = true
+        _errorMessage.value = null
+        viewModelScope.launch {
+            try {
+                repository.sendPasswordResetEmail(email.trim())
+                _successMessage.value = "Password reset email sent! Please check your inbox."
+            } catch (e: Exception) {
+                _errorMessage.value = friendlyAuthError(e)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     fun completeOnboarding(vibes: List<String>) {
-        // Post-signup travel vibe preference handling
+        _isOnboarding.value = false
     }
 
     /**

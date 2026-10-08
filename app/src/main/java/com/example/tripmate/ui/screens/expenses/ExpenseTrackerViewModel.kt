@@ -66,7 +66,7 @@ class ExpenseTrackerViewModel : ViewModel() {
             try {
                 val found = repository.inviteMemberByEmail(tripId, email)
                 if (!found) {
-                    _errorMessage.value = "No TripPilot user found with that email"
+                    _errorMessage.value = "No TripMate user found with that email"
                 } else {
                     load(tripId)
                 }

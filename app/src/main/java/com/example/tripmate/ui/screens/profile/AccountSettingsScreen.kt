@@ -1,5 +1,6 @@
 package com.example.tripmate.ui.screens.profile
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -81,16 +82,35 @@ fun AccountSettingsScreen(
             }
             
             SettingSection(title = "Preferences") {
+                var showCurrencyInfoDialog by remember { mutableStateOf(false) }
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = Dimens.sm),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showCurrencyInfoDialog = true }
+                        .padding(vertical = Dimens.sm),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Default Currency", style = MaterialTheme.typography.bodyLarge)
-                        Text("INR (\u20B9)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Indian Rupee (₹) • Default for all trips", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("Change", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Text("Details", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                }
+
+                if (showCurrencyInfoDialog) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showCurrencyInfoDialog = false },
+                        title = { Text("Currency Settings") },
+                        text = {
+                            Text("TripMate defaults to Indian Rupee (₹) for all itineraries, activities, stays, and expenses — both for domestic trips within India and international trips abroad.")
+                        },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = { showCurrencyInfoDialog = false }) {
+                                Text("OK")
+                            }
+                        }
+                    )
                 }
             }
         }

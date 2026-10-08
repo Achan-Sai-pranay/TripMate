@@ -12,7 +12,7 @@ val DisplayFontFamily = FontFamily.SansSerif
 val BodyFontFamily = FontFamily.SansSerif
 
 // Exact type scale from DESIGN.md `typography` tokens
-val TripPilotTypography = Typography(
+val TripMateTypography = Typography(
     // display: 48/56, weight 800, letterSpacing -0.02em
     displayLarge = TextStyle(
         fontFamily = DisplayFontFamily,
@@ -87,3 +87,4 @@ val TripPilotTypography = Typography(
         letterSpacing = 0.05.em
     )
 )
+val TripPilotTypography = TripMateTypography

@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Public
@@ -100,7 +101,7 @@ import coil.compose.AsyncImage
 import com.example.tripmate.model.ChatMessage
 import com.example.tripmate.ui.components.BottomNavTab
 import com.example.tripmate.ui.components.InteractiveAssistantMap
-import com.example.tripmate.ui.components.TripPilotBottomNav
+import com.example.tripmate.ui.components.TripMateBottomNav
 import com.example.tripmate.ui.theme.Dimens
 import com.example.tripmate.ui.theme.PrimaryOrange
 import com.example.tripmate.ui.theme.SubtleBorder
@@ -230,7 +231,7 @@ fun AiAssistantScreen(
             )
         },
         bottomBar = {
-            TripPilotBottomNav(
+            com.example.tripmate.ui.components.TripMateBottomNav(
                 selectedTab = BottomNavTab.ASSISTANT,
                 onTabSelected = { tab ->
                     when (tab) {
@@ -478,7 +479,7 @@ fun AiAssistantScreen(
 }
 
 /**
- * Top bar header with profile photo, TripPilot branding, and status indicator.
+ * Top bar header with profile photo, TripMate branding, and status indicator.
  */
 @Composable
 private fun AssistantTopBar(
@@ -508,7 +509,7 @@ private fun AssistantTopBar(
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "TripPilot",
+                        text = "TripMate",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryOrange
@@ -839,6 +840,23 @@ private fun CompetitorStructuredMessage(rawText: String, onSpotClick: ((String) 
                                         modifier = Modifier.padding(top = 2.dp)
                                     )
                                 }
+                            }
+
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            IconButton(
+                                onClick = {
+                                    val query = android.net.Uri.encode(spotName)
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:0,0?q=$query"))
+                                    runCatching { context.startActivity(intent) }
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Map,
+                                    contentDescription = "View on Map",
+                                    tint = Color(0xFF2563EB),
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
                     }

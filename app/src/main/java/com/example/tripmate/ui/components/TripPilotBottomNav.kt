@@ -25,7 +25,7 @@ enum class BottomNavTab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-fun TripPilotBottomNav(
+fun TripMateBottomNav(
     selectedTab: BottomNavTab,
     onTabSelected: (BottomNavTab) -> Unit,
     modifier: Modifier = Modifier
@@ -61,4 +61,17 @@ fun TripPilotBottomNav(
             )
         }
     }
+}
+
+@Composable
+fun TripPilotBottomNav(
+    selectedTab: BottomNavTab,
+    onTabSelected: (BottomNavTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    TripMateBottomNav(
+        selectedTab = selectedTab,
+        onTabSelected = onTabSelected,
+        modifier = modifier
+    )
 }

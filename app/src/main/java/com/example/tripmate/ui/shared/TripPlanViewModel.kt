@@ -201,10 +201,11 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 val rawPlan = parseTripPlan(raw, req, dateLabels)
                 val plan = reconcileFixedActivities(rawPlan, req.preferences.fixedActivities)
 
+                val userId = authRepository.currentUserId()
                 // Show itinerary immediately so the screen transitions without awaiting image enrichment
                 _tripPlan.value = plan
                 repository.save(plan)
-                historyRepository.append(plan)
+                historyRepository.append(plan, userId)
                 _isGenerating.value = false
 
                 // Enrich images in the background
@@ -221,7 +222,6 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 }
 
                 // Create Supabase trip row in background (non-fatal — expense tracking is a bonus feature)
-                val userId = authRepository.currentUserId()
                 if (userId != null) {
                     viewModelScope.launch {
                         try {
@@ -271,9 +271,22 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
             Food preferences/restrictions: $foodLabel.
             Do not add filler items like 'Wake up'/'Morning refresh'; only real activities and meals.
 
+            CRITICAL CURRENCY INSTRUCTION:
+            The default currency for the entire app is Indian Rupees (₹).
+            All activity costs, entrance fees, hotel prices, and dining prices must ALWAYS be in Indian Rupees (₹),
+            even if the destination is abroad or in a foreign country (convert foreign currency to estimated INR).
+            Always format price and cost labels with the '₹' symbol (e.g. '₹450', '₹3,500/night').
+
+            CRITICAL HOTEL & STAYS INSTRUCTION:
+            Only recommend real, verified, best-rated hotels and accommodations with ratings of 4.3 or higher (4.3 to 5.0).
+            Prioritize the highest-rated, popular places that travelers love:
+            1. "Budget" tier: Top-rated affordable hotel or clean boutique hostel (rating 4.3+)
+            2. "Mid-range" tier: Highly rated 3-4 star hotel with great amenities (rating 4.5+)
+            3. "Luxury" tier: Premier 5-star hotel, palace, or luxury resort (rating 4.7+)
+
             Also provide:
-            1. 3 Stays categorized by budget tiers: "Budget", "Mid-range", "Luxury", with estimated pricePerNight in ₹, location, and rating.
-            2. 3-4 famous local Dining spots with cuisine, priceRange (e.g. ₹, ₹₹, ₹₹₹), famousFor dish, and rating.
+            1. 3 Stays matching the budget tiers above with estimated pricePerNight in ₹, location, and rating (>= 4.3).
+            2. 3-4 famous local Dining spots with cuisine, priceRange in ₹ (e.g. ₹300-₹700), famousFor dish, and rating (>= 4.3).
             3. For each itinerary item, provide place details: rating (e.g. 4.6), reviewCount (e.g. 1540), openingHours (e.g. 9:00 AM - 6:00 PM), and travel info to the next stop: distanceLabel (e.g. "2.4 km"), durationLabel (e.g. "12 mins"), transportMode (e.g. "Drive", "Walk", "Metro").
 
             Return ONLY raw JSON (no markdown fences, no prose) matching exactly this shape:
@@ -299,12 +312,12 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 }
               ],
               "stays": [
-                { "name": "...", "tier": "Budget", "pricePerNight": "₹1,200/night", "location": "Near Central Station", "rating": 4.2, "whyRecommended": "Clean and centrally located" },
-                { "name": "...", "tier": "Mid-range", "pricePerNight": "₹3,500/night", "location": "Downtown Heritage Area", "rating": 4.6, "whyRecommended": "Great amenities and pool" },
-                { "name": "...", "tier": "Luxury", "pricePerNight": "₹8,500/night", "location": "Lakeside / Scenic Bay", "rating": 4.8, "whyRecommended": "5-star luxury experience" }
+                { "name": "...", "tier": "Budget", "pricePerNight": "₹1,500/night", "location": "Central Area", "rating": 4.4, "whyRecommended": "Top-rated budget stay with excellent cleanliness" },
+                { "name": "...", "tier": "Mid-range", "pricePerNight": "₹4,200/night", "location": "Heritage District", "rating": 4.6, "whyRecommended": "Exceptional reviews and central location" },
+                { "name": "...", "tier": "Luxury", "pricePerNight": "₹9,500/night", "location": "Scenic Waterfront", "rating": 4.8, "whyRecommended": "Premier 5-star experience with world-class service" }
               ],
               "dining": [
-                { "name": "...", "cuisine": "Authentic Local", "priceRange": "₹₹", "famousFor": "Signature Biryani / Thali", "rating": 4.7 }
+                { "name": "...", "cuisine": "Authentic Local", "priceRange": "₹₹", "famousFor": "Signature Local Dish", "rating": 4.7 }
               ]
             }
         """.trimIndent()
@@ -503,6 +516,14 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         val updatedPlan = plan.copy(customExpenses = updatedExpenses)
         _tripPlan.value = updatedPlan
         viewModelScope.launch { repository.save(updatedPlan) }
+    }
+
+    fun loadTrip(plan: TripPlan) {
+        _tripPlan.value = plan
+        viewModelScope.launch {
+            repository.save(plan)
+            resolveMissingCoordinates()
+        }
     }
 
     fun clearTrip() {

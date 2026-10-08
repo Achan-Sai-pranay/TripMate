@@ -64,4 +64,26 @@ class DestinationRankerTest {
         assertEquals(1, ranked.size)
         assertEquals("Goa", ranked.first().name)
     }
+
+    @Test
+    fun cafesAndHotelsExcluded() {
+        val cafe = DestinationSuggestion("Kashmir Cafe", "Delhi", "India")
+        val hotel = DestinationSuggestion("Kashmir Hotel & Suites", "Srinagar", "India")
+        val realKashmir = DestinationSuggestion("Kashmir", "Jammu and Kashmir", "India")
+
+        val scoreCafe = DestinationRanker.matchScore(cafe, "kashm", isCurated = false)
+        val scoreHotel = DestinationRanker.matchScore(hotel, "kashm", isCurated = false)
+        val scoreReal = DestinationRanker.matchScore(realKashmir, "kashm", isCurated = true)
+
+        org.junit.Assert.assertNull("Cafe must be rejected", scoreCafe)
+        org.junit.Assert.assertNull("Hotel must be rejected", scoreHotel)
+        assertNotNull("Real Kashmir destination must have a valid score", scoreReal)
+
+        val ranked = DestinationRanker.rankAndDedupe(
+            listOf(cafe to false, hotel to false, realKashmir to true),
+            "kashm"
+        )
+        assertEquals(1, ranked.size)
+        assertEquals("Kashmir", ranked.first().name)
+    }
 }

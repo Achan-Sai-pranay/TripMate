@@ -62,7 +62,7 @@ import com.example.tripmate.model.ItineraryItem
 import com.example.tripmate.model.ItineraryTab
 import com.example.tripmate.model.TripSummary
 import com.example.tripmate.ui.components.BottomNavTab
-import com.example.tripmate.ui.components.TripPilotBottomNav
+import com.example.tripmate.ui.components.TripMateBottomNav
 import com.example.tripmate.ui.shared.TripPlanViewModel
 import com.example.tripmate.ui.theme.Dimens
 
@@ -103,7 +103,7 @@ fun TripItineraryScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            TripPilotBottomNav(
+            com.example.tripmate.ui.components.TripMateBottomNav(
                 selectedTab = BottomNavTab.MY_TRIPS,
                 onTabSelected = { tab ->
                     when (tab) {

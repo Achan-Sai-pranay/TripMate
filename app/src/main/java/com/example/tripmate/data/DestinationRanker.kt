@@ -56,6 +56,7 @@ object DestinationRanker {
      * Higher score = better match. Returns null if not a valid match.
      */
     fun matchScore(dest: DestinationSuggestion, rawQuery: String, isCurated: Boolean = false): Double? {
+        if (DestinationSearchRepository.isExcludedDestination(dest.name)) return null
         val q = normalize(rawQuery)
         if (q.isBlank()) return 0.0
 

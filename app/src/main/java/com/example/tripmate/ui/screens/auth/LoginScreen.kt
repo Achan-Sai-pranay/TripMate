@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -154,14 +155,14 @@ fun LoginScreen(
         ) {
             Image(
                 painter = painterResource(id = com.example.tripmate.R.drawable.app_logo),
-                contentDescription = "TripPilot Logo",
+                contentDescription = "TripMate Logo",
                 modifier = Modifier
                     .size(72.dp)
                     .clip(RoundedCornerShape(18.dp))
             )
             Spacer(modifier = Modifier.height(Dimens.md))
             Text(
-                text = "TripPilot",
+                text = "TripMate",
                 style = MaterialTheme.typography.displayLarge.copy(fontSize = 40.sp),
                 color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
@@ -243,11 +244,71 @@ fun LoginScreen(
                     .padding(top = Dimens.md)
             )
 
+            var showForgotPasswordDialog by remember { mutableStateOf(false) }
+            var resetEmailInput by remember { mutableStateOf("") }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = {
+                    resetEmailInput = email
+                    showForgotPasswordDialog = true
+                }) {
+                    Text(
+                        "Forgot Password?",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            if (showForgotPasswordDialog) {
+                AlertDialog(
+                    onDismissRequest = { showForgotPasswordDialog = false },
+                    title = { Text("Reset Password") },
+                    text = {
+                        Column {
+                            Text(
+                                "Enter your email address and we will send you password reset instructions.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(Dimens.md))
+                            OutlinedTextField(
+                                value = resetEmailInput,
+                                onValueChange = { resetEmailInput = it },
+                                label = { Text("Email Address") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.sendPasswordResetEmail(resetEmailInput)
+                                showForgotPasswordDialog = false
+                            },
+                            enabled = resetEmailInput.isNotBlank()
+                        ) {
+                            Text("Send Reset Link")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showForgotPasswordDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
             Button(
                 onClick = { viewModel.signIn(email, password) },
                 enabled = !isLoading,
                 modifier = Modifier
-                    .padding(top = Dimens.xl)
+                    .padding(top = Dimens.md)
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(Dimens.radiusFull),

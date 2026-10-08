@@ -281,7 +281,7 @@ fun ExpenseTrackerScreen(
             text = {
                 Column {
                     Text(
-                        "They must already have a TripPilot account.",
+                        "They must already have a TripMate account.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -265,6 +265,19 @@ object DestinationSearchRepository {
         DestinationRanker.rankAndDedupe(all, q).take(8)
     }
 
+    val EXCLUDED_NAME_TOKENS = setOf(
+        "cafe", "café", "coffee", "restaurant", "hotel", "resort", "dhaba", "bistro",
+        "bakery", "bar", "pub", "inn", "hostel", "homestay", "lodge", "motel", "villa",
+        "suites", "spa", "salon", "store", "shop", "mart", "bazaar", "supermarket",
+        "gym", "hospital", "clinic", "pharmacy", "bank", "atm", "school", "college",
+        "food", "kitchen", "canteen", "sweets", "tea", "chai"
+    )
+
+    fun isExcludedDestination(name: String): Boolean {
+        val tokens = name.lowercase().split(Regex("[^a-zA-Z0-9]+")).filter { it.isNotBlank() }
+        return tokens.any { it in EXCLUDED_NAME_TOKENS }
+    }
+
     private suspend fun queryPhoton(q: String): List<DestinationSuggestion> {
         return try {
             val encoded = URLEncoder.encode(q, StandardCharsets.UTF_8.toString())
@@ -297,14 +310,25 @@ object DestinationSearchRepository {
                 val name = prop.optString("name", "").trim()
                 if (name.isBlank()) continue
 
+                // Exclude commercial entities, cafes, hotels, shops
+                if (isExcludedDestination(name)) continue
+
                 val osmKey = prop.optString("osm_key", "")
                 val osmValue = prop.optString("osm_value", "")
                 val type = prop.optString("type", "")
 
-                // Keep place-like and administrative features only
-                val isPlaceLike = osmKey in listOf("place", "boundary") ||
-                        osmValue in listOf("city", "town", "village", "state", "region", "island", "country", "administrative", "suburb") ||
-                        type in listOf("city", "town", "district", "locality", "state", "country")
+                // Strictly reject amenities, shops, food places, buildings
+                if (osmKey in listOf("amenity", "shop", "tourism", "leisure", "highway", "building", "office", "craft", "emergency", "historic")) {
+                    continue
+                }
+                if (osmValue in listOf("cafe", "restaurant", "hotel", "motel", "hostel", "bar", "pub", "fast_food", "bakery", "supermarket", "shop", "convenience", "guest_house", "resort", "chalet", "fuel")) {
+                    continue
+                }
+
+                // Keep place-like and administrative features only (cities, towns, villages, states, regions, countries)
+                val isPlaceLike = (osmKey in listOf("place", "boundary") &&
+                        osmValue in listOf("city", "town", "village", "state", "region", "province", "country", "island", "administrative", "suburb", "hamlet", "municipality")) ||
+                        type in listOf("city", "town", "village", "district", "state", "country", "region", "province", "municipality")
 
                 if (!isPlaceLike) continue
 
@@ -336,7 +360,7 @@ object DestinationSearchRepository {
     private suspend fun queryNominatim(q: String): List<DestinationSuggestion> {
         return try {
             val encoded = URLEncoder.encode(q, StandardCharsets.UTF_8.toString())
-            val url = "https://nominatim.openstreetmap.org/search?q=$encoded&format=json&limit=6&addressdetails=1"
+            val url = "https://nominatim.openstreetmap.org/search?q=$encoded&format=json&limit=6&addressdetails=1&featuretype=settlement"
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", "TripMateApp/1.0 (Android; Contact: support@tripmate.app)")
@@ -360,6 +384,27 @@ object DestinationSearchRepository {
                 val obj = array.optJSONObject(i) ?: continue
                 val name = obj.optString("name", "").trim()
                 if (name.isEmpty()) continue
+
+                // Exclude commercial entities, cafes, hotels, shops
+                if (isExcludedDestination(name)) continue
+
+                val osmClass = obj.optString("class", "")
+                val osmType = obj.optString("type", "")
+                val addresstype = obj.optString("addresstype", "")
+
+                // Strictly reject amenities, shops, food places, buildings
+                if (osmClass in listOf("amenity", "shop", "tourism", "leisure", "highway", "building", "office", "craft", "emergency", "historic")) {
+                    continue
+                }
+                if (osmType in listOf("cafe", "restaurant", "hotel", "motel", "hostel", "bar", "pub", "fast_food", "bakery", "supermarket", "shop", "convenience", "guest_house", "resort", "chalet", "fuel")) {
+                    continue
+                }
+
+                val isSettlement = osmClass in listOf("place", "boundary") ||
+                        osmType in listOf("city", "town", "village", "state", "region", "province", "country", "island", "administrative", "suburb", "hamlet", "municipality") ||
+                        addresstype in listOf("city", "town", "village", "state", "region", "province", "country", "island", "municipality")
+
+                if (!isSettlement) continue
 
                 val address = obj.optJSONObject("address")
                 val state = address?.optString("state", "")

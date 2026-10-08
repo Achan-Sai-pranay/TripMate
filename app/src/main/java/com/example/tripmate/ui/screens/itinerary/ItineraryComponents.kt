@@ -1,5 +1,6 @@
 package com.example.tripmate.ui.screens.itinerary
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
@@ -726,12 +729,11 @@ fun BudgetBreakdownView(
     onReplanCheaper: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var includeStays by remember { mutableStateOf(true) }
-    var includeDining by remember { mutableStateOf(true) }
     var selectedCategoryFilter by remember { mutableStateOf<ExpenseCategory?>(null) }
     var showEditBudgetDialog by remember { mutableStateOf(false) }
     var showAddExpenseDialog by remember { mutableStateOf(false) }
     var editingExpense by remember { mutableStateOf<BudgetEntry?>(null) }
+    var showAiEstimates by remember { mutableStateOf(false) }
 
     val itineraryItems = remember(plan.days) { plan.days.flatMap { it.items } }
     val staysCost = remember(plan.stays, plan.travelerCount) {
@@ -745,43 +747,27 @@ fun BudgetBreakdownView(
             if (item.costAmount > 0) item.costAmount else com.example.tripmate.util.CostParser.parseRupees(item.costLabel, plan.travelerCount)
         }
     }
-    val customExpensesCost = remember(plan.customExpenses) {
+    // Only user-added expenses count as spent (AI recommendations never auto-count as spent)
+    val totalSpent = remember(plan.customExpenses) {
         plan.customExpenses.sumOf { it.amount }
     }
-
-    val totalSpent = itineraryItemsCost + customExpensesCost +
-            (if (includeStays) staysCost else 0) +
-            (if (includeDining) diningCost else 0)
 
     val remaining = plan.budget - totalSpent
     val isOverBudget = totalSpent > plan.budget
     val progress = if (plan.budget > 0) (totalSpent.toFloat() / plan.budget).coerceIn(0f, 1f) else 0f
 
-    val categoryTotals = remember(itineraryItems, plan.customExpenses, includeStays, includeDining, staysCost, diningCost, plan.travelerCount) {
+    val categoryTotals = remember(plan.customExpenses) {
         val map = ExpenseCategory.values().associateWith { 0 }.toMutableMap()
-        itineraryItems.forEach { item ->
-            val amt = if (item.costAmount > 0) item.costAmount else com.example.tripmate.util.CostParser.parseRupees(item.costLabel, plan.travelerCount)
-            map[item.category] = (map[item.category] ?: 0) + amt
-        }
         plan.customExpenses.forEach { exp ->
             map[exp.category] = (map[exp.category] ?: 0) + exp.amount
-        }
-        if (includeStays) {
-            map[ExpenseCategory.STAY] = (map[ExpenseCategory.STAY] ?: 0) + staysCost
-        }
-        if (includeDining) {
-            map[ExpenseCategory.FOOD] = (map[ExpenseCategory.FOOD] ?: 0) + diningCost
         }
         map.filterValues { it > 0 }
     }
 
-    val dayTotals = remember(plan.days, plan.customExpenses, plan.travelerCount) {
-        plan.days.map { day ->
-            val dayItemsCost = day.items.sumOf { item ->
-                if (item.costAmount > 0) item.costAmount else com.example.tripmate.util.CostParser.parseRupees(item.costLabel, plan.travelerCount)
-            }
+    val dayTotals = remember(plan.days, plan.customExpenses) {
+        plan.days.mapNotNull { day ->
             val dayCustomCost = plan.customExpenses.filter { it.dayNumber == day.dayNumber }.sumOf { it.amount }
-            day.dayNumber to (dayItemsCost + dayCustomCost)
+            if (dayCustomCost > 0) day.dayNumber to dayCustomCost else null
         }
     }
 
@@ -888,7 +874,7 @@ fun BudgetBreakdownView(
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Text(
-                            text = "TripPilot can suggest free or budget alternatives.",
+                            text = "TripMate can suggest free or budget alternatives.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -1061,45 +1047,24 @@ fun BudgetBreakdownView(
             }
         }
 
-        // Inclusions Toggles (Stays & Dining) - stacked vertically so chips never overflow screen width
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(Dimens.xs)
-        ) {
-            Text(
-                text = "Include in Budget:",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
-            ) {
-                FilterChip(
-                    selected = includeStays,
-                    onClick = { includeStays = !includeStays },
-                    label = { Text("Stays (₹$staysCost)") }
-                )
-                FilterChip(
-                    selected = includeDining,
-                    onClick = { includeDining = !includeDining },
-                    label = { Text("Dining (₹$diningCost)") }
-                )
-            }
-        }
-
         // Action Header: Filter indication + Add Expense button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = if (selectedCategoryFilter != null) "Category: ${selectedCategoryFilter!!.name}" else "Itemized Breakdown",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Column {
+                Text(
+                    text = if (selectedCategoryFilter != null) "Category: ${selectedCategoryFilter!!.name}" else "User-Logged Expenses",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${plan.customExpenses.size} expense(s) logged by you",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             FilledTonalButton(
                 onClick = { showAddExpenseDialog = true },
                 contentPadding = PaddingValues(horizontal = Dimens.md, vertical = Dimens.xs)
@@ -1110,63 +1075,42 @@ fun BudgetBreakdownView(
             }
         }
 
-        // Filtered / Grouped Itemized List
+        // Filtered / Grouped Itemized List (Only user-added expenses — no AI auto-added expenses)
         Card(
             shape = RoundedCornerShape(Dimens.radiusMd),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column {
-                val filteredItems = itineraryItems.filter {
-                    selectedCategoryFilter == null || it.category == selectedCategoryFilter
-                }
                 val filteredCustom = plan.customExpenses.filter {
                     selectedCategoryFilter == null || it.category == selectedCategoryFilter
                 }
 
-                if (filteredItems.isEmpty() && filteredCustom.isEmpty()) {
+                if (filteredCustom.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(Dimens.lg),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "No expenses in this category.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                filteredItems.forEachIndexed { index, item ->
-                    val amt = if (item.costAmount > 0) item.costAmount else com.example.tripmate.util.CostParser.parseRupees(item.costLabel, plan.travelerCount)
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(Dimens.md),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f).padding(end = Dimens.md)
-                        ) {
-                            Icon(item.icon, contentDescription = null, tint = categoryColor(item.category), modifier = Modifier.size(18.dp))
-                            Column(modifier = Modifier.padding(start = Dimens.sm)) {
-                                Text(item.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                                Text(
-                                    item.category.name.lowercase().replaceFirstChar { it.uppercase() },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Filled.Payments,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.height(Dimens.xs))
+                            Text(
+                                text = if (selectedCategoryFilter != null) "No expenses in this category." else "No expenses logged yet.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Only expenses you add appear here. Tap '+ Add Expense' to record spending.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                        Text(
-                            text = "₹$amt",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    if (index != filteredItems.lastIndex || filteredCustom.isNotEmpty()) {
-                        androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
                     }
                 }
 
@@ -1207,6 +1151,63 @@ fun BudgetBreakdownView(
                     }
                     if (index != filteredCustom.lastIndex) {
                         androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                    }
+                }
+            }
+        }
+
+        // AI Estimates Reference Card (Informational only — does NOT count towards spent)
+        Card(
+            shape = RoundedCornerShape(Dimens.radiusCard),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(Dimens.md)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAiEstimates = !showAiEstimates },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "AI Projected Costs (Planning Reference)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Estimated costs — not counted towards spent expenses",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = if (showAiEstimates) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                AnimatedVisibility(visible = showAiEstimates) {
+                    Column(modifier = Modifier.padding(top = Dimens.md), verticalArrangement = Arrangement.spacedBy(Dimens.xs)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Planned Activities (AI)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("₹$itineraryItemsCost", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Recommended Stays (AI)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("₹$staysCost", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Recommended Dining (AI)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("₹$diningCost", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.padding(vertical = 4.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Total AI Projected Cost", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            Text("₹${itineraryItemsCost + staysCost + diningCost}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
             }
@@ -1508,25 +1509,41 @@ fun StaysSectionView(
                         verticalAlignment = Alignment.Top
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = Dimens.sm)) {
-                            Surface(
-                                shape = RoundedCornerShape(Dimens.radiusFull),
-                                color = when (stay.tier.lowercase()) {
-                                    "budget" -> MaterialTheme.colorScheme.secondaryContainer
-                                    "luxury" -> MaterialTheme.colorScheme.tertiaryContainer
-                                    else -> MaterialTheme.colorScheme.primaryContainer
-                                }
-                            ) {
-                                Text(
-                                    text = stay.tier.uppercase(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.xs)) {
+                                Surface(
+                                    shape = RoundedCornerShape(Dimens.radiusFull),
                                     color = when (stay.tier.lowercase()) {
-                                        "budget" -> MaterialTheme.colorScheme.onSecondaryContainer
-                                        "luxury" -> MaterialTheme.colorScheme.onTertiaryContainer
-                                        else -> MaterialTheme.colorScheme.onPrimaryContainer
-                                    },
-                                    modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 2.dp)
-                                )
+                                        "budget" -> MaterialTheme.colorScheme.secondaryContainer
+                                        "luxury" -> MaterialTheme.colorScheme.tertiaryContainer
+                                        else -> MaterialTheme.colorScheme.primaryContainer
+                                    }
+                                ) {
+                                    Text(
+                                        text = stay.tier.uppercase(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when (stay.tier.lowercase()) {
+                                            "budget" -> MaterialTheme.colorScheme.onSecondaryContainer
+                                            "luxury" -> MaterialTheme.colorScheme.onTertiaryContainer
+                                            else -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        },
+                                        modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 2.dp)
+                                    )
+                                }
+                                if (stay.rating >= 4.5) {
+                                    Surface(
+                                        shape = RoundedCornerShape(Dimens.radiusFull),
+                                        color = Color(0xFFFEF3C7)
+                                    ) {
+                                        Text(
+                                            text = "★ Top Rated",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFB45309),
+                                            modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 2.dp)
+                                        )
+                                    }
+                                }
                             }
                             Spacer(modifier = Modifier.height(Dimens.xs))
                             Text(
@@ -1579,6 +1596,21 @@ fun StaysSectionView(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = {
+                            val query = android.net.Uri.encode("${stay.name}, ${stay.location}")
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:0,0?q=$query"))
+                            runCatching { context.startActivity(intent) }
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(top = Dimens.sm),
+                        contentPadding = PaddingValues(vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("View on Map", style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }

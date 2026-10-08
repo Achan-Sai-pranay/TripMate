@@ -151,25 +151,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun detectDestinationFromText(text: String): String? {
         val lower = text.lowercase()
-        return when {
-            lower.contains("goa") -> "Goa"
-            lower.contains("kashmir") || lower.contains("srinagar") -> "Kashmir"
-            lower.contains("paris") -> "Paris"
-            lower.contains("manali") -> "Manali"
-            lower.contains("hyderabad") -> "Hyderabad"
-            lower.contains("tokyo") -> "Tokyo"
-            lower.contains("kyoto") -> "Kyoto"
-            lower.contains("bali") -> "Bali"
-            lower.contains("dubai") -> "Dubai"
-            lower.contains("jaipur") -> "Jaipur"
-            lower.contains("udaipur") -> "Udaipur"
-            lower.contains("ladakh") || lower.contains("leh") -> "Ladakh"
-            lower.contains("kerala") || lower.contains("munnar") -> "Kerala"
-            lower.contains("london") -> "London"
-            lower.contains("rome") -> "Rome"
-            lower.contains("new york") || lower.contains("nyc") -> "New York"
-            else -> null
+        for (dest in com.example.tripmate.data.DestinationSearchRepository.offlineDestinations) {
+            val nameLower = dest.name.lowercase()
+            if (nameLower.length >= 3 && lower.contains(nameLower)) {
+                return dest.name
+            }
         }
+        return null
     }
 
     private class RawPlace(val name: String, val day: Int, val order: Int)

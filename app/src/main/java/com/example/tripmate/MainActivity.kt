@@ -15,9 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.tripmate.data.SupabaseClientProvider
 import com.example.tripmate.navigation.AuthNavGraph
-import com.example.tripmate.navigation.TripPilotNavGraph
+import com.example.tripmate.navigation.TripMateNavGraph
 import com.example.tripmate.ui.screens.auth.AuthViewModel
-import com.example.tripmate.ui.theme.TripPilotTheme
+import com.example.tripmate.ui.theme.TripMateTheme
 import io.github.jan.supabase.auth.handleDeeplinks
 
 class MainActivity : ComponentActivity() {
@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
         )
         enableEdgeToEdge()
         setContent {
-            TripPilotApp()
+            TripMateApp()
         }
     }
 
@@ -56,20 +56,26 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun TripPilotApp() {
-    TripPilotTheme {
+fun TripMateApp() {
+    TripMateTheme {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
             val authViewModel: AuthViewModel = viewModel()
             val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+            val isOnboarding by authViewModel.isOnboarding.collectAsState()
 
-            when (isLoggedIn) {
-                null  -> { /* Session check in-flight — show nothing briefly */ }
-                false -> AuthNavGraph()
-                true  -> TripPilotNavGraph()
+            when {
+                isLoggedIn == null -> { /* Session check in-flight — show nothing briefly */ }
+                isLoggedIn == true && !isOnboarding -> TripMateNavGraph()
+                else -> AuthNavGraph(authViewModel = authViewModel)
             }
         }
     }
+}
+
+@Composable
+fun TripPilotApp() {
+    TripMateApp()
 }

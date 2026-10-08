@@ -36,18 +36,18 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         viewModelScope.launch {
             val isGuestMode = guestManager.isGuest()
             _isGuest.value = isGuestMode
+            val userId = if (isGuestMode) null else authRepository.currentUserId()
             if (isGuestMode) {
                 _displayName.value = "Guest Traveler"
-                _email.value = "guest@trippilot.local"
+                _email.value = "guest@tripmate.local"
             } else {
-                val userId = authRepository.currentUserId()
                 if (userId != null) {
                     val profile = profileRepository.fetchProfile(userId)
                     _displayName.value = profile?.fullName ?: authRepository.currentUserName() ?: "Traveler"
                     _email.value = profile?.email ?: authRepository.currentUserEmail().orEmpty()
                 }
             }
-            _tripHistory.value = historyRepository.loadAll()
+            _tripHistory.value = historyRepository.loadAll(userId)
         }
     }
 

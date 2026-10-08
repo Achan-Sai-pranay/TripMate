@@ -57,7 +57,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.tripmate.model.TravelStat
 import com.example.tripmate.model.TripPlan
 import com.example.tripmate.ui.components.BottomNavTab
-import com.example.tripmate.ui.components.TripPilotBottomNav
+import com.example.tripmate.ui.components.TripMateBottomNav
 import com.example.tripmate.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
@@ -68,6 +68,7 @@ fun ProfileScreen(
     onAssistantClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onHelpClick: () -> Unit,
+    onTripClick: (TripPlan) -> Unit = {},
     onLoggedOut: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = viewModel()
@@ -107,7 +108,7 @@ fun ProfileScreen(
             )
         },
         bottomBar = {
-            TripPilotBottomNav(
+            com.example.tripmate.ui.components.TripMateBottomNav(
                 selectedTab = BottomNavTab.PROFILE,
                 onTabSelected = { tab ->
                     when (tab) {
@@ -149,7 +150,9 @@ fun ProfileScreen(
                         NoTripsYetCard()
                     } else {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(Dimens.md)) {
-                            items(tripHistory) { trip -> SavedTripCard(trip) }
+                            items(tripHistory) { trip ->
+                                SavedTripCard(trip = trip, onClick = { onTripClick(trip) })
+                            }
                         }
                     }
                 }
@@ -251,7 +254,7 @@ private fun ProfileTopBar(onNotificationsClick: () -> Unit, modifier: Modifier =
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "TripPilot",
+            text = "TripMate",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
@@ -322,8 +325,13 @@ private fun TravelStatsRow(stats: List<TravelStat>, modifier: Modifier = Modifie
 }
 
 @Composable
-private fun SavedTripCard(trip: TripPlan, modifier: Modifier = Modifier) {
+private fun SavedTripCard(
+    trip: TripPlan,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Card(
+        onClick = onClick,
         modifier = modifier.width(180.dp).height(140.dp),
         shape = RoundedCornerShape(Dimens.radiusMd),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
