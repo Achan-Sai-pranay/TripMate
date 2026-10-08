@@ -89,10 +89,11 @@ fun ProfileScreen(
         tripHistory.sumOf { it.budget }
     }
     val stats = remember(tripHistory, distinctDestinations, totalPlannedBudget) {
+        val budgetLabel = if (totalPlannedBudget >= 1000) "₹${totalPlannedBudget / 1000}k" else "₹$totalPlannedBudget"
         listOf(
             TravelStat(value = "${tripHistory.size}", label = "Trips Planned"),
             TravelStat(value = "$distinctDestinations", label = "Destinations"),
-            TravelStat(value = "\u20B9${totalPlannedBudget / 1000}k", label = "Total Budget", isTertiary = true)
+            TravelStat(value = budgetLabel, label = "Total Budget", isTertiary = true)
         )
     }
 

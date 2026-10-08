@@ -223,6 +223,7 @@ fun AiAssistantScreen(
         topBar = {
             AssistantTopBar(
                 avatarUrl = ASSISTANT_USER_AVATAR_URL,
+                onAvatarClick = onProfileClick,
                 onNotificationsClick = {
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar("You're all caught up — no new notifications")
@@ -485,6 +486,7 @@ fun AiAssistantScreen(
 private fun AssistantTopBar(
     avatarUrl: String,
     onNotificationsClick: () -> Unit,
+    onAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -503,6 +505,7 @@ private fun AssistantTopBar(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
+                    .clickable { onAvatarClick() }
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
             )
             Spacer(modifier = Modifier.width(Dimens.sm))

@@ -86,6 +86,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -1316,7 +1317,10 @@ private fun AddOrEditExpenseDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initialEntry == null) "Add Custom Expense" else "Edit Expense") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(Dimens.sm)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Dimens.sm)
+            ) {
                 androidx.compose.material3.OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -1414,7 +1418,10 @@ fun EditItineraryItemDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit Activity") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(Dimens.sm)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Dimens.sm)
+            ) {
                 androidx.compose.material3.OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 androidx.compose.material3.OutlinedTextField(value = time, onValueChange = { time = it }, label = { Text("Time") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Row(horizontalArrangement = Arrangement.spacedBy(Dimens.sm)) {

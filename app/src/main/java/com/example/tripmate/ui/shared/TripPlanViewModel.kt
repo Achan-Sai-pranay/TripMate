@@ -70,7 +70,8 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         )
         // Load the saved active trip if present.
         viewModelScope.launch {
-            val saved = repository.load()
+            val uid = authRepository.currentUserId()
+            val saved = repository.load(uid) ?: repository.load(null)
             if (saved != null) {
                 _tripPlan.value = saved
                 resolveMissingCoordinates()
@@ -121,7 +122,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
             } finally {
                 val self = coroutineContext[Job]
                 withContext(NonCancellable) {
-                    if (changed) _tripPlan.value?.let { repository.save(it) }
+                    if (changed) _tripPlan.value?.let { persistPlan(it) }
                     // Only the newest lookup job clears the flag (an older, cancelled one must not).
                     if (resolveJob === self) _isResolvingPlaces.value = false
                 }
@@ -204,7 +205,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 val userId = authRepository.currentUserId()
                 // Show itinerary immediately so the screen transitions without awaiting image enrichment
                 _tripPlan.value = plan
-                repository.save(plan)
+                persistPlan(plan)
                 historyRepository.append(plan, userId)
                 _isGenerating.value = false
 
@@ -217,7 +218,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                         val current = _tripPlan.value ?: plan
                         val enrichedPlan = current.copy(days = enrichedDays)
                         _tripPlan.value = enrichedPlan
-                        repository.save(enrichedPlan)
+                        persistPlan(enrichedPlan)
                     } catch (_: Exception) { }
                 }
 
@@ -235,7 +236,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                             val current = _tripPlan.value ?: plan
                             val updatedWithSupabase = current.copy(supabaseTripId = supabaseTripId)
                             _tripPlan.value = updatedWithSupabase
-                            repository.save(updatedWithSupabase)
+                            persistPlan(updatedWithSupabase)
                         } catch (_: Exception) { }
                     }
                 }
@@ -484,7 +485,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         }
         val updatedPlan = plan.copy(days = updatedDays)
         _tripPlan.value = updatedPlan
-        viewModelScope.launch { repository.save(updatedPlan) }
+        viewModelScope.launch { persistPlan(updatedPlan) }
         resolveMissingCoordinates()
     }
 
@@ -492,14 +493,14 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         val plan = _tripPlan.value ?: return
         val updatedPlan = plan.copy(budget = newBudget)
         _tripPlan.value = updatedPlan
-        viewModelScope.launch { repository.save(updatedPlan) }
+        viewModelScope.launch { persistPlan(updatedPlan) }
     }
 
     fun addExpense(entry: BudgetEntry) {
         val plan = _tripPlan.value ?: return
         val updatedPlan = plan.copy(customExpenses = plan.customExpenses + entry)
         _tripPlan.value = updatedPlan
-        viewModelScope.launch { repository.save(updatedPlan) }
+        viewModelScope.launch { persistPlan(updatedPlan) }
     }
 
     fun updateExpense(entry: BudgetEntry) {
@@ -507,7 +508,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         val updatedExpenses = plan.customExpenses.map { if (it.id == entry.id) entry else it }
         val updatedPlan = plan.copy(customExpenses = updatedExpenses)
         _tripPlan.value = updatedPlan
-        viewModelScope.launch { repository.save(updatedPlan) }
+        viewModelScope.launch { persistPlan(updatedPlan) }
     }
 
     fun deleteExpense(entryId: String) {
@@ -515,20 +516,29 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         val updatedExpenses = plan.customExpenses.filterNot { it.id == entryId }
         val updatedPlan = plan.copy(customExpenses = updatedExpenses)
         _tripPlan.value = updatedPlan
-        viewModelScope.launch { repository.save(updatedPlan) }
+        viewModelScope.launch { persistPlan(updatedPlan) }
+    }
+
+    private suspend fun persistPlan(plan: TripPlan) {
+        val uid = authRepository.currentUserId()
+        repository.save(plan, uid)
     }
 
     fun loadTrip(plan: TripPlan) {
         _tripPlan.value = plan
         viewModelScope.launch {
-            repository.save(plan)
+            persistPlan(plan)
             resolveMissingCoordinates()
         }
     }
 
     fun clearTrip() {
         _tripPlan.value = null
-        viewModelScope.launch { repository.clear() }
+        viewModelScope.launch {
+            val uid = authRepository.currentUserId()
+            repository.clear(uid)
+            repository.clear(null)
+        }
     }
 
     private fun dayCountBetween(startMillis: Long, endMillis: Long): Int {

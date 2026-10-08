@@ -1,6 +1,8 @@
 package com.example.tripmate.ui.screens.profile
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,7 +56,8 @@ fun AccountSettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(Dimens.lg),
+                .padding(Dimens.lg)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(Dimens.xl)
         ) {
             SettingSection(title = "Appearance") {

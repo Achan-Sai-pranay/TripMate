@@ -98,7 +98,10 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(Dimens.xl)
         ) {
             item {
-                HomeHeader(userAvatarUrl = USER_AVATAR_URL)
+                HomeHeader(
+                    userAvatarUrl = USER_AVATAR_URL,
+                    onAvatarClick = onProfileClick
+                )
             }
 
             item {

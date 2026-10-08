@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,6 +55,7 @@ import com.example.tripmate.ui.theme.OutlineVariant
 @Composable
 fun HomeHeader(
     userAvatarUrl: String,
+    onAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val greeting = remember {
@@ -89,6 +92,7 @@ fun HomeHeader(
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape)
+                .clickable { onAvatarClick() }
                 .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
         )
     }
@@ -453,7 +457,12 @@ fun QuickTripLengthSheet(
     onSelect: (Long, Long) -> Unit
 ) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(Dimens.lg).padding(bottom = Dimens.xl)) {
+        Column(
+            modifier = Modifier
+                .padding(Dimens.lg)
+                .padding(bottom = Dimens.xl)
+                .verticalScroll(rememberScrollState())
+        ) {
             Text("How long is your trip?", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             Column(modifier = Modifier.padding(top = Dimens.md), verticalArrangement = Arrangement.spacedBy(Dimens.sm)) {
                 TripLengthOption("Weekend (3 days)") { onSelect(nowMillis(), nowMillis() + 2 * DAY_MILLIS) }
@@ -490,7 +499,12 @@ fun BudgetGemsSheet(
     onPickDestination: (String) -> Unit
 ) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(Dimens.lg).padding(bottom = Dimens.xl)) {
+        Column(
+            modifier = Modifier
+                .padding(Dimens.lg)
+                .padding(bottom = Dimens.xl)
+                .verticalScroll(rememberScrollState())
+        ) {
             Text("Budget-Friendly Destinations", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxWidth().padding(Dimens.xl), contentAlignment = Alignment.Center) {
