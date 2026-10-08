@@ -49,6 +49,8 @@ private const val MAX_PLACES = 20
 
 class AssistantViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val chatRepo = com.example.tripmate.data.AssistantChatRepository(application)
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
@@ -66,6 +68,15 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private var activeDestination: String = ""
     private var geocodeJob: Job? = null
 
+    init {
+        viewModelScope.launch {
+            val saved = chatRepo.loadMessages()
+            if (_messages.value.isEmpty() && saved.isNotEmpty()) {
+                _messages.value = saved
+            }
+        }
+    }
+
     fun setInitialDestination(destination: String) {
         if (destination.isNotBlank()) {
             activeDestination = destination
@@ -74,6 +85,14 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun dismissMap() {
         _activeMapRoute.value = null
+    }
+
+    fun clearChat() {
+        _messages.value = emptyList()
+        _activeMapRoute.value = null
+        viewModelScope.launch {
+            chatRepo.clearMessages()
+        }
     }
 
     fun sendMessage(text: String) {
@@ -93,6 +112,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
         val updatedConversation = _messages.value + ChatMessage(text = text, isFromUser = true)
         _messages.value = updatedConversation
+        viewModelScope.launch { chatRepo.saveMessages(updatedConversation) }
         _isLoading.value = true
         _errorMessage.value = null
 
@@ -129,6 +149,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
         val updatedConversation = _messages.value + ChatMessage(text = messageText, isFromUser = true)
         _messages.value = updatedConversation
+        viewModelScope.launch { chatRepo.saveMessages(updatedConversation) }
         _isLoading.value = true
         _errorMessage.value = null
 
@@ -168,7 +189,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val destination = tag?.groupValues?.get(1)?.trim().takeUnless { it.isNullOrBlank() } ?: activeDestination
         if (destination.isNotBlank()) activeDestination = destination
         val display = reply.replace(DESTINATION_TAG, "").trimEnd()
-        _messages.value = _messages.value + ChatMessage(text = display, isFromUser = false)
+        val updated = _messages.value + ChatMessage(text = display, isFromUser = false)
+        _messages.value = updated
+        viewModelScope.launch { chatRepo.saveMessages(updated) }
         buildMapRoute(display, destination)
     }
 

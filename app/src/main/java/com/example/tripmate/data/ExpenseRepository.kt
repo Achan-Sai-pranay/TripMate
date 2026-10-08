@@ -132,4 +132,14 @@ class ExpenseRepository {
             MemberBalance(profile = member, paid = paid, fairShare = fairShare)
         }
     }
+
+    suspend fun deleteExpense(expenseId: String): Boolean {
+        return try {
+            splits.delete { filter { eq("expense_id", expenseId) } }
+            expenses.delete { filter { eq("id", expenseId) } }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
 }

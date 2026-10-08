@@ -6,7 +6,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -48,6 +51,25 @@ fun TripMateNavGraph(
     navController: NavHostController = rememberNavController()
 ) {
     val tripPlanViewModel: TripPlanViewModel = viewModel()
+    val authRepo = remember { com.example.tripmate.data.AuthRepository() }
+    val sessionStatus by authRepo.sessionFlow.collectAsState()
+
+    LaunchedEffect(sessionStatus) {
+        tripPlanViewModel.resetAndLoadForCurrentUser()
+    }
+
+    val pendingInvite by com.example.tripmate.MainActivity.pendingTripInviteId.collectAsState()
+    LaunchedEffect(pendingInvite) {
+        val tripId = pendingInvite
+        if (!tripId.isNullOrBlank()) {
+            tripPlanViewModel.joinTripByCodeOrLink(tripId) { success, _ ->
+                if (success) {
+                    com.example.tripmate.MainActivity.pendingTripInviteId.value = null
+                    navController.navigateToTab(Screen.TripItinerary.route)
+                }
+            }
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -67,7 +89,7 @@ fun TripMateNavGraph(
                     navController.navigateToTab(Screen.TripItinerary.route)
                 },
                 onMyTripsClick = {
-                    navController.navigateToTab(Screen.TripItinerary.route)
+                    navController.navigateToTab(Screen.MyTrips.route)
                 },
                 onAssistantClick = {
                     navController.navigateToTab(Screen.AiAssistant.route)
@@ -220,9 +242,33 @@ fun TripMateNavGraph(
                 onProfileClick = {
                     navController.navigateToTab(Screen.Profile.route)
                 },
+                onMyTripsClick = {
+                    navController.navigateToTab(Screen.MyTrips.route)
+                },
                 onOpenExpenses = { tripId ->
                     navController.navigate(Screen.ExpenseTracker.buildRoute(tripId))
                 }
+            )
+        }
+
+        composable(
+            route = Screen.MyTrips.route,
+            enterTransition = { fadeIn(tween(200)) },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(200)) },
+            popExitTransition = { fadeOut(tween(200)) }
+        ) {
+            com.example.tripmate.ui.screens.trips.MyTripsScreen(
+                onTripClick = { selectedTrip ->
+                    tripPlanViewModel.loadTrip(selectedTrip)
+                    navController.navigateToTab(Screen.TripItinerary.route)
+                },
+                onPlanNewTripClick = {
+                    navController.navigate(Screen.CreateTripBasics.buildRoute())
+                },
+                onExploreClick = { navController.navigateToTab(Screen.Home.route) },
+                onAssistantClick = { navController.navigateToTab(Screen.AiAssistant.route) },
+                onProfileClick = { navController.navigateToTab(Screen.Profile.route) }
             )
         }
 
@@ -237,7 +283,7 @@ fun TripMateNavGraph(
             AiAssistantScreen(
                 initialDestination = destination,
                 onExploreClick = { navController.navigateToTab(Screen.Home.route) },
-                onMyTripsClick = { navController.navigateToTab(Screen.TripItinerary.route) },
+                onMyTripsClick = { navController.navigateToTab(Screen.MyTrips.route) },
                 onProfileClick = { navController.navigateToTab(Screen.Profile.route) }
             )
         }
@@ -251,7 +297,7 @@ fun TripMateNavGraph(
         ) {
             ProfileScreen(
                 onExploreClick = { navController.navigateToTab(Screen.Home.route) },
-                onMyTripsClick = { navController.navigateToTab(Screen.TripItinerary.route) },
+                onMyTripsClick = { navController.navigateToTab(Screen.MyTrips.route) },
                 onAssistantClick = { navController.navigateToTab(Screen.AiAssistant.route) },
                 onSettingsClick = { navController.navigate(Screen.AccountSettings.route) },
                 onHelpClick = { navController.navigate(Screen.HelpSupport.route) },
@@ -298,7 +344,10 @@ fun TripMateNavGraph(
             val tripId = backStackEntry.arguments?.getString("tripId") ?: return@composable
             ExpenseTrackerScreen(
                 tripId = tripId,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = {
+                    tripPlanViewModel.syncExpensesFromCloud()
+                    navController.popBackStack()
+                }
             )
         }
     }

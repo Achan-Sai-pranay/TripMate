@@ -61,6 +61,17 @@ class ExpenseTrackerViewModel : ViewModel() {
         }
     }
 
+    fun deleteExpense(tripId: String, expenseId: String) {
+        viewModelScope.launch {
+            try {
+                repository.deleteExpense(expenseId)
+                load(tripId)
+            } catch (e: Exception) {
+                _errorMessage.value = e.message ?: "Couldn't delete expense"
+            }
+        }
+    }
+
     fun inviteMember(tripId: String, email: String) {
         viewModelScope.launch {
             try {

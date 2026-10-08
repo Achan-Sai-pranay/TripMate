@@ -31,6 +31,9 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -327,7 +330,8 @@ fun TimelineItemRow(
     isSelected: Boolean = false,
     onClick: (() -> Unit)? = null,
     destination: String = "",
-    nextItem: ItineraryItem? = null
+    nextItem: ItineraryItem? = null,
+    onVoteClick: ((Boolean) -> Unit)? = null
 ) {
     // Destination-specific photo: the item's stored image, else a cached/looked-up photo of THIS place.
     // Generic activities (breakfast, free time, check-in...) have no place and keep the plain card.
@@ -456,33 +460,104 @@ fun TimelineItemRow(
                             }
                         }
 
-                        Box {
-                            var menuExpanded by remember { mutableStateOf(false) }
-                            IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(28.dp)) {
-                                Icon(
-                                    imageVector = Icons.Filled.MoreVert,
-                                    contentDescription = "More options",
-                                    tint = Color.White
-                                )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Interactive Group Voting Pill
+                            Surface(
+                                shape = RoundedCornerShape(Dimens.radiusFull),
+                                color = Color.Black.copy(alpha = 0.55f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                ) {
+                                    val isUpvoted = item.votes.userVote == "UP"
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(Dimens.radiusFull))
+                                            .background(if (isUpvoted) Color(0xFF10B981).copy(alpha = 0.35f) else Color.Transparent)
+                                            .clickable(enabled = onVoteClick != null) { onVoteClick?.invoke(true) }
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.ThumbUp,
+                                            contentDescription = "Upvote",
+                                            tint = if (isUpvoted) Color(0xFF34D399) else Color.White.copy(alpha = 0.85f),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            text = "${item.votes.upvotes}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (isUpvoted) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isUpvoted) Color(0xFF34D399) else Color.White
+                                        )
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .height(12.dp)
+                                            .width(1.dp)
+                                            .background(Color.White.copy(alpha = 0.25f))
+                                    )
+
+                                    val isDownvoted = item.votes.userVote == "DOWN"
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(Dimens.radiusFull))
+                                            .background(if (isDownvoted) Color(0xFFEF4444).copy(alpha = 0.35f) else Color.Transparent)
+                                            .clickable(enabled = onVoteClick != null) { onVoteClick?.invoke(false) }
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.ThumbDown,
+                                            contentDescription = "Downvote",
+                                            tint = if (isDownvoted) Color(0xFFF87171) else Color.White.copy(alpha = 0.85f),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(Modifier.width(3.dp))
+                                        Text(
+                                            text = "${item.votes.downvotes}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (isDownvoted) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isDownvoted) Color(0xFFF87171) else Color.White
+                                        )
+                                    }
+                                }
                             }
-                            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                                if (!item.isFixed) {
-                                    DropdownMenuItem(
-                                        text = { Text("Duplicate") },
-                                        leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
-                                        onClick = { menuExpanded = false; onDuplicateClick() }
+
+                            Spacer(Modifier.width(Dimens.xs))
+
+                            Box {
+                                var menuExpanded by remember { mutableStateOf(false) }
+                                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(28.dp)) {
+                                    Icon(
+                                        imageVector = Icons.Filled.MoreVert,
+                                        contentDescription = "More options",
+                                        tint = Color.White
                                     )
-                                    DropdownMenuItem(
-                                        text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                                        leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                        onClick = { menuExpanded = false; onDeleteClick() }
-                                    )
-                                } else {
-                                    DropdownMenuItem(
-                                        text = { Text("This is a fixed commitment", color = MaterialTheme.colorScheme.onSurfaceVariant) },
-                                        onClick = { menuExpanded = false },
-                                        enabled = false
-                                    )
+                                }
+                                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                                    if (!item.isFixed) {
+                                        DropdownMenuItem(
+                                            text = { Text("Duplicate") },
+                                            leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                                            onClick = { menuExpanded = false; onDuplicateClick() }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
+                                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                            onClick = { menuExpanded = false; onDeleteClick() }
+                                        )
+                                    } else {
+                                        DropdownMenuItem(
+                                            text = { Text("This is a fixed commitment", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                                            onClick = { menuExpanded = false },
+                                            enabled = false
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -498,10 +573,38 @@ fun TimelineItemRow(
 
                     Row(
                         modifier = Modifier.padding(top = Dimens.xs, bottom = Dimens.sm),
-                        horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.sm),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         InfoChip(icon = Icons.Filled.Schedule, label = item.durationLabel, isDark = true)
                         InfoChip(icon = Icons.Filled.Payments, label = item.costLabel, isDark = true)
+                        if (item.votes.netScore >= 1) {
+                            Surface(
+                                shape = RoundedCornerShape(Dimens.radiusSm),
+                                color = Color(0xFF10B981).copy(alpha = 0.25f)
+                            ) {
+                                Text(
+                                    text = "🔥 Top Pick (+${item.votes.netScore})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF34D399),
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 4.dp)
+                                )
+                            }
+                        } else if (item.votes.netScore <= -1) {
+                            Surface(
+                                shape = RoundedCornerShape(Dimens.radiusSm),
+                                color = Color(0xFFEF4444).copy(alpha = 0.25f)
+                            ) {
+                                Text(
+                                    text = "⚠️ Mixed (${item.votes.netScore})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFFF87171),
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 4.dp)
+                                )
+                            }
+                        }
                     }
 
                     // Glassmorphic "Why this?" box
@@ -728,7 +831,8 @@ fun BudgetBreakdownView(
     onUpdateExpense: (BudgetEntry) -> Unit,
     onDeleteExpense: (String) -> Unit,
     onReplanCheaper: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenExpenses: ((String) -> Unit)? = null
 ) {
     var selectedCategoryFilter by remember { mutableStateOf<ExpenseCategory?>(null) }
     var showEditBudgetDialog by remember { mutableStateOf(false) }
@@ -850,6 +954,83 @@ fun BudgetBreakdownView(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
+                    }
+                }
+            }
+        }
+
+        // Group Split & Shared Members Card
+        val effectiveGroupMembers = maxOf(plan.travelerCount, plan.membersCount, 1)
+        if (effectiveGroupMembers > 1 || plan.isShared) {
+            val perPersonBudget = plan.budget / effectiveGroupMembers
+            val perPersonSpent = totalSpent / effectiveGroupMembers
+            Card(
+                shape = RoundedCornerShape(Dimens.radiusCard),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(Dimens.lg)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Filled.Groups,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(Dimens.xs))
+                            Text(
+                                text = "Group Split ($effectiveGroupMembers Travelers)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        if (plan.isShared) {
+                            Surface(
+                                shape = RoundedCornerShape(Dimens.radiusFull),
+                                color = Color(0xFF10B981).copy(alpha = 0.18f)
+                            ) {
+                                Text(
+                                    text = "Live Shared",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF10B981),
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = Dimens.sm),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Fair Share / Person", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("₹$perPersonSpent", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Budget / Person", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("₹$perPersonBudget", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    if (plan.supabaseTripId != null && onOpenExpenses != null) {
+                        Spacer(Modifier.height(Dimens.md))
+                        FilledTonalButton(
+                            onClick = { onOpenExpenses(plan.supabaseTripId) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(Dimens.radiusFull)
+                        ) {
+                            Icon(Icons.Filled.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Manage Group Expenses & Balances", style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
             }
@@ -1061,7 +1242,7 @@ fun BudgetBreakdownView(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "${plan.customExpenses.size} expense(s) logged by you",
+                    text = if (plan.isShared || plan.membersCount > 1) "${plan.customExpenses.size} shared expense(s)" else "${plan.customExpenses.size} expense(s) logged",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1107,7 +1288,10 @@ fun BudgetBreakdownView(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Only expenses you add appear here. Tap '+ Add Expense' to record spending.",
+                                text = if (plan.isShared || plan.membersCount > 1)
+                                    "Tap '+ Add Expense' or use 'Group Expenses' to log spending."
+                                else
+                                    "Tap '+ Add Expense' to record spending.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1128,8 +1312,11 @@ fun BudgetBreakdownView(
                             Icon(Icons.Filled.Payments, contentDescription = null, tint = categoryColor(custom.category), modifier = Modifier.size(18.dp))
                             Column(modifier = Modifier.padding(start = Dimens.sm)) {
                                 Text(custom.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                                val catName = custom.category.name.lowercase().replaceFirstChar { it.uppercase() }
+                                val dayText = custom.dayNumber?.let { " • Day $it" } ?: ""
+                                val splitText = if (plan.isShared || plan.membersCount > 1) " • Shared" else ""
                                 Text(
-                                    "${custom.category.name.lowercase().replaceFirstChar { it.uppercase() }}${custom.dayNumber?.let { " • Day $it" } ?: ""}",
+                                    "$catName$dayText$splitText",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

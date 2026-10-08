@@ -11,6 +11,8 @@ private val Context.tripPlanDataStore by preferencesDataStore(name = "trip_plan_
 
 class TripPlanRepository(private val context: Context) {
 
+    private val legacyKey = stringPreferencesKey("current_trip_plan")
+
     private fun planKey(userId: String?) =
         stringPreferencesKey("current_trip_plan_${userId?.trim()?.ifBlank { "guest" } ?: "guest"}")
 
@@ -23,6 +25,7 @@ class TripPlanRepository(private val context: Context) {
     suspend fun clear(userId: String? = null) {
         context.tripPlanDataStore.edit { prefs ->
             prefs.remove(planKey(userId))
+            prefs.remove(legacyKey)
         }
     }
 

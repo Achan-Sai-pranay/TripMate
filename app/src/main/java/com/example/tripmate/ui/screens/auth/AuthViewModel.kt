@@ -20,6 +20,13 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AuthRepository()
     private val guestManager = GuestModeManager(application)
     private val profileRepository = ProfileRepository()
+    private val userPrefs = com.example.tripmate.data.UserPreferencesRepository(application)
+
+    val travelVibes: StateFlow<List<String>> = userPrefs.travelVibesFlow.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        emptyList()
+    )
 
     /**
      * null  = session status not yet determined (show splash / nothing)
@@ -182,6 +189,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun completeOnboarding(vibes: List<String>) {
+        viewModelScope.launch {
+            userPrefs.setTravelVibes(vibes)
+        }
         _isOnboarding.value = false
     }
 

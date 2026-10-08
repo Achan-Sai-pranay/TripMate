@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.Button
@@ -56,6 +57,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import com.example.tripmate.data.WikipediaImageService
 import com.example.tripmate.model.ItineraryDay
 import com.example.tripmate.model.ItineraryItem
@@ -75,6 +77,7 @@ fun TripItineraryScreen(
     onProfileClick: () -> Unit,
     onOpenExpenses: (tripId: String) -> Unit,
     modifier: Modifier = Modifier,
+    onMyTripsClick: () -> Unit = {},
     aiViewModel: ItineraryAiViewModel = viewModel()
 ) {
     val tripPlan by tripPlanViewModel.tripPlan.collectAsState()
@@ -90,6 +93,10 @@ fun TripItineraryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(planError) { planError?.let { snackbarHostState.showSnackbar(it); tripPlanViewModel.dismissError() } }
     LaunchedEffect(aiError) { aiError?.let { snackbarHostState.showSnackbar(it); aiViewModel.dismissError() } }
+
+    val tripMembers by tripPlanViewModel.tripMembers.collectAsState()
+    var showInviteSheet by remember { mutableStateOf(false) }
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     var selectedViewTab by remember { mutableStateOf(ItineraryTab.ITINERARY) }
     var currentDayIndex by remember { mutableStateOf(0) }
@@ -108,7 +115,7 @@ fun TripItineraryScreen(
                 onTabSelected = { tab ->
                     when (tab) {
                         BottomNavTab.EXPLORE -> onExploreClick()
-                        BottomNavTab.MY_TRIPS -> { /* already here */ }
+                        BottomNavTab.MY_TRIPS -> onMyTripsClick()
                         BottomNavTab.ASSISTANT -> onAssistantClick()
                         BottomNavTab.PROFILE -> onProfileClick()
                     }
@@ -169,6 +176,17 @@ fun TripItineraryScreen(
                     }
                 }
 
+                LaunchedEffect(plan.supabaseTripId) {
+                    tripPlanViewModel.loadTripMembers()
+                    tripPlanViewModel.syncExpensesFromCloud()
+                }
+
+                LaunchedEffect(selectedViewTab) {
+                    if (selectedViewTab == ItineraryTab.BUDGET) {
+                        tripPlanViewModel.syncExpensesFromCloud()
+                    }
+                }
+
                 val heroImages = remember(plan) {
                     plan.days.flatMap { it.items }.mapNotNull { it.imageUrl }.distinct()
                 }
@@ -184,6 +202,32 @@ fun TripItineraryScreen(
                     verticalArrangement = Arrangement.spacedBy(Dimens.lg)
                 ) {
                     item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            androidx.compose.material3.TextButton(
+                                onClick = onMyTripsClick,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Back to All Trips",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "All Trips",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                    item {
                         TripSummaryCard(
                             trip = TripSummary(
                                 destination = plan.destination,
@@ -193,26 +237,23 @@ fun TripItineraryScreen(
                             heroImages = heroImages
                         )
                     }
-                    // Group expenses button — only shown when a Supabase trip row exists
-                    plan.supabaseTripId?.let { tripId ->
-                        item {
-                            OutlinedButton(
-                                onClick = { onOpenExpenses(tripId) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(Dimens.radiusFull)
-                            ) {
-                                Icon(
-                                    Icons.Filled.Groups,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    " Manage Group Expenses",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(start = Dimens.xs)
-                                )
+                    // Trip collaboration & companions section: Member avatars, invite link & group expenses
+                    item {
+                        TripCollaborationCard(
+                            plan = plan,
+                            members = tripMembers,
+                            onInviteClick = { showInviteSheet = true },
+                            onManageExpensesClick = {
+                                coroutineScope.launch {
+                                    val tripId = plan.supabaseTripId ?: tripPlanViewModel.ensureTripSyncedToCloud()
+                                    if (tripId != null) {
+                                        onOpenExpenses(tripId)
+                                    } else {
+                                        snackbarHostState.showSnackbar("Please sign in to manage group expenses.")
+                                    }
+                                }
                             }
-                        }
+                        )
                     }
                     item {
                         ItineraryViewTabs(
@@ -243,10 +284,11 @@ fun TripItineraryScreen(
                             }
                             itemsIndexed(
                                 items = currentDay.items,
-                                key = { index, item -> "${currentDay.dayNumber}_${index}_${item.time}_${item.title}" }
+                                key = { _, item -> item.id }
                             ) { index, item ->
                                 val isReplacing = (item.time + item.title) == replacingItemKey
                                 val pinKey = currentDay.pinKey(index)
+                                val targetItemId = item.id
                                 TimelineItemRow(
                                     item = item,
                                     nextItem = currentDay.items.getOrNull(index + 1),
@@ -255,18 +297,27 @@ fun TripItineraryScreen(
                                     onClick = pinKey?.let { key -> { selectedPinKey = key; focusToken++ } },
                                     isLastItem = index == currentDay.items.lastIndex,
                                     isReplacing = isReplacing,
+                                    onVoteClick = { isUpvote ->
+                                        tripPlanViewModel.castVote(currentDayIndex, item.id, if (isUpvote) "UP" else "DOWN")
+                                    },
                                     onEditClick = { editingItem = index to item },
                                     onReplaceClick = {
                                         aiViewModel.replaceItem(
                                             destination = plan.destination,
                                             item = item
                                         ) { newItem ->
-                                            val newItems = currentDay.items.toMutableList().also { it[index] = newItem }
-                                            tripPlanViewModel.updateDay(currentDayIndex, newItems)
+                                            val latestDay = tripPlanViewModel.tripPlan.value?.days?.getOrNull(currentDayIndex) ?: currentDay
+                                            val latestIndex = latestDay.items.indexOfFirst { it.id == targetItemId }
+                                            if (latestIndex >= 0) {
+                                                val newItems = latestDay.items.toMutableList().also {
+                                                    it[latestIndex] = newItem.copy(id = targetItemId)
+                                                }
+                                                tripPlanViewModel.updateDay(currentDayIndex, newItems)
+                                            }
                                         }
                                     },
                                     onDuplicateClick = {
-                                        val duplicate = item.copy()
+                                        val duplicate = item.copy(id = java.util.UUID.randomUUID().toString())
                                         val newItems = currentDay.items.toMutableList().apply { add(index + 1, duplicate) }
                                         tripPlanViewModel.updateDay(currentDayIndex, newItems)
                                     },
@@ -285,6 +336,7 @@ fun TripItineraryScreen(
                                     onAddExpense = { entry -> tripPlanViewModel.addExpense(entry) },
                                     onUpdateExpense = { entry -> tripPlanViewModel.updateExpense(entry) },
                                     onDeleteExpense = { id -> tripPlanViewModel.deleteExpense(id) },
+                                    onOpenExpenses = onOpenExpenses,
                                     onReplanCheaper = {
                                         val currentDay = plan.days.getOrNull(currentDayIndex) ?: plan.days.firstOrNull()
                                         if (currentDay != null) {
@@ -342,6 +394,14 @@ fun TripItineraryScreen(
                             tripPlanViewModel.updateDay(currentDayIndex, newItems)
                             editingItem = null
                         }
+                    )
+                }
+
+                if (showInviteSheet) {
+                    TripInviteSheet(
+                        tripPlanViewModel = tripPlanViewModel,
+                        destination = plan.destination,
+                        onDismiss = { showInviteSheet = false }
                     )
                 }
             }

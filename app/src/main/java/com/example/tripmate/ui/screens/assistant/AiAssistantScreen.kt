@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LocationOn
@@ -224,6 +225,12 @@ fun AiAssistantScreen(
             AssistantTopBar(
                 avatarUrl = ASSISTANT_USER_AVATAR_URL,
                 onAvatarClick = onProfileClick,
+                onClearChatClick = {
+                    viewModel.clearChat()
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Chat history cleared")
+                    }
+                },
                 onNotificationsClick = {
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar("You're all caught up — no new notifications")
@@ -486,6 +493,7 @@ fun AiAssistantScreen(
 private fun AssistantTopBar(
     avatarUrl: String,
     onNotificationsClick: () -> Unit,
+    onClearChatClick: () -> Unit,
     onAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -533,12 +541,21 @@ private fun AssistantTopBar(
             }
         }
 
-        IconButton(onClick = onNotificationsClick) {
-            Icon(
-                Icons.Filled.Notifications,
-                contentDescription = "Notifications",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClearChatClick) {
+                Icon(
+                    imageVector = Icons.Filled.DeleteOutline,
+                    contentDescription = "Clear Chat",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onNotificationsClick) {
+                Icon(
+                    Icons.Filled.Notifications,
+                    contentDescription = "Notifications",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }

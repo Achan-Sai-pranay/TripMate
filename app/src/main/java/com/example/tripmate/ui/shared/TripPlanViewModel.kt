@@ -37,12 +37,19 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.coroutineContext
 
+import com.example.tripmate.data.CollaborativeTripRepository
+import com.example.tripmate.data.UserPreferencesRepository
+import kotlinx.coroutines.flow.first
+
 class TripPlanViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = TripPlanRepository(application)
     private val historyRepository = TripHistoryRepository(application)
     private val authRepository = AuthRepository()
     private val expenseRepository = ExpenseRepository()
+    private val collaborativeRepo = CollaborativeTripRepository()
+    private val userPrefs = UserPreferencesRepository(application)
+    private val guestManager = com.example.tripmate.data.GuestModeManager(application)
 
     private val _request = MutableStateFlow(TripPlanRequest())
     val request: StateFlow<TripPlanRequest> = _request.asStateFlow()
@@ -52,6 +59,9 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
 
     private val _tripPlan = MutableStateFlow<TripPlan?>(null)
     val tripPlan: StateFlow<TripPlan?> = _tripPlan.asStateFlow()
+
+    private val _tripMembers = MutableStateFlow<List<com.example.tripmate.model.ProfileRow>>(emptyList())
+    val tripMembers: StateFlow<List<com.example.tripmate.model.ProfileRow>> = _tripMembers.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
@@ -68,15 +78,8 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
             startDateMillis = defaultStart,
             endDateMillis = defaultEnd
         )
-        // Load the saved active trip if present.
-        viewModelScope.launch {
-            val uid = authRepository.currentUserId()
-            val saved = repository.load(uid) ?: repository.load(null)
-            if (saved != null) {
-                _tripPlan.value = saved
-                resolveMissingCoordinates()
-            }
-        }
+        // Load the saved active trip strictly for the current user.
+        resetAndLoadForCurrentUser()
     }
 
     /**
@@ -99,8 +102,9 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                         val lower = query.lowercase()
                         if (lower == "free time" || lower == "leisure" || lower == "rest" || lower == "hotel check-in" || lower == "check-in") continue
 
+                        val globalIndex = (day.dayNumber - 1) * 8 + itemIndex
                         val point = GeocodingHelper.resolve(context, query, snapshot.destination)
-                            ?: GeocodingHelper.fallbackPoint(snapshot.destination, itemIndex)
+                            ?: GeocodingHelper.fallbackPoint(snapshot.destination, globalIndex)
                             ?: continue
 
                         // Re-read the plan: the user may have edited it while we were looking things up.
@@ -200,13 +204,13 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
 
                 val raw = GeminiApiClient.generateJson(apiKey, prompt)
                 val rawPlan = parseTripPlan(raw, req, dateLabels)
-                val plan = reconcileFixedActivities(rawPlan, req.preferences.fixedActivities)
+                val reconciled = reconcileFixedActivities(rawPlan, req.preferences.fixedActivities)
 
                 val userId = authRepository.currentUserId()
+                val plan = if (userId != null) reconciled.copy(userId = userId) else reconciled
                 // Show itinerary immediately so the screen transitions without awaiting image enrichment
                 _tripPlan.value = plan
                 persistPlan(plan)
-                historyRepository.append(plan, userId)
                 _isGenerating.value = false
 
                 // Enrich images in the background
@@ -216,27 +220,23 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                             day.copy(items = WikipediaImageService.enrichAll(day.items, req.destination))
                         }
                         val current = _tripPlan.value ?: plan
-                        val enrichedPlan = current.copy(days = enrichedDays)
+                        val enrichedPlan = current.copy(days = enrichedDays, userId = userId)
                         _tripPlan.value = enrichedPlan
                         persistPlan(enrichedPlan)
                     } catch (_: Exception) { }
                 }
 
-                // Create Supabase trip row in background (non-fatal — expense tracking is a bonus feature)
+                // Create or sync collaborative trip row in background for multi-account access
                 if (userId != null) {
                     viewModelScope.launch {
                         try {
-                            val supabaseTripId = expenseRepository.createTrip(
-                                name = "${plan.destination} Trip",
-                                destination = plan.destination,
-                                startDate = null,
-                                endDate = null,
-                                createdBy = userId
-                            )
-                            val current = _tripPlan.value ?: plan
-                            val updatedWithSupabase = current.copy(supabaseTripId = supabaseTripId)
-                            _tripPlan.value = updatedWithSupabase
-                            persistPlan(updatedWithSupabase)
+                            val supabaseTripId = collaborativeRepo.syncTripToCloud(plan, userId)
+                            if (supabaseTripId != null) {
+                                val current = _tripPlan.value ?: plan
+                                val updatedWithSupabase = current.copy(supabaseTripId = supabaseTripId, userId = userId)
+                                _tripPlan.value = updatedWithSupabase
+                                persistPlan(updatedWithSupabase)
+                            }
                         } catch (_: Exception) { }
                     }
                 }
@@ -250,7 +250,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun buildPrompt(req: TripPlanRequest, dayCount: Int, dateLabels: List<String>): String {
+    private suspend fun buildPrompt(req: TripPlanRequest, dayCount: Int, dateLabels: List<String>): String {
         val travelerCount = req.travelers.value
         val mustVisitLabel = req.mustVisit.joinToString(", ").ifBlank { "no specific preferences" }
         val avoidLabel = req.avoid.joinToString(", ").ifBlank { "nothing specific" }
@@ -260,12 +260,16 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         val foodLabel = prefs.foodPreferences.joinToString(", ").ifBlank { "no restrictions" }
         val famousNote = if (prefs.prioritizeFamousPlaces) "Prefer famous/iconic places even if they need an earlier start or extra travel." else "Prefer convenient, nearby options over famous-but-inconvenient ones."
 
+        val userVibes = try { userPrefs.travelVibesFlow.first() } catch (_: Exception) { emptyList() }
+        val vibesNote = if (userVibes.isNotEmpty()) "Traveler's selected travel vibes: ${userVibes.joinToString(", ")}. Tailor activities, locations, and recommendations to match these vibes closely." else ""
+
         return """
             You are an expert travel planner. Create a $dayCount-day itinerary for $travelerCount traveler(s)
             visiting ${req.destination}, dated: ${dateLabels.joinToString(", ")}.
             Total budget: ₹${req.budget}.
             Travel pace: ${req.pace.label}. Walking tolerance: ${req.walkingTolerance.label}.
             Must include: $mustVisitLabel. Must avoid: $avoidLabel.
+            $vibesNote
 
             Daily schedule constraints: start exploring around ${prefs.exploreStartTime}, wrap up the day around ${prefs.dayEndTime}. $famousNote
             Fixed-time commitments to schedule around: $fixedActivitiesLabel.
@@ -288,7 +292,8 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
             Also provide:
             1. 3 Stays matching the budget tiers above with estimated pricePerNight in ₹, location, and rating (>= 4.3).
             2. 3-4 famous local Dining spots with cuisine, priceRange in ₹ (e.g. ₹300-₹700), famousFor dish, and rating (>= 4.3).
-            3. For each itinerary item, provide place details: rating (e.g. 4.6), reviewCount (e.g. 1540), openingHours (e.g. 9:00 AM - 6:00 PM), and travel info to the next stop: distanceLabel (e.g. "2.4 km"), durationLabel (e.g. "12 mins"), transportMode (e.g. "Drive", "Walk", "Metro").
+            3. For each itinerary item, provide place details: rating (e.g. 4.6), reviewCount (e.g. 1540), openingHours (e.g. 9:00 AM - 6:00 PM), and accurate real-world latitude and longitude for the physical place/attraction (e.g. latitude: 34.1167, longitude: 74.8728 for Dal Lake). Provide distinct coordinates for every different activity so each day's map is accurate and never in a straight line.
+            4. Travel info to the next stop: distanceLabel (e.g. "2.4 km"), durationLabel (e.g. "12 mins"), transportMode (e.g. "Drive", "Walk", "Metro").
 
             Return ONLY raw JSON (no markdown fences, no prose) matching exactly this shape:
             {
@@ -306,7 +311,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                       "whyThis": "one short sentence",
                       "placeName": "real, searchable name of the specific place or venue, e.g. Fort Aguada (null for generic activities such as free time or hotel check-in)",
                       "wikipediaTitle": "exact Wikipedia article title if known, e.g. Fort Aguada (or null)",
-                      "placeDetails": { "rating": 4.6, "reviewCount": 2400, "openingHours": "09:00 AM - 05:30 PM" },
+                      "placeDetails": { "rating": 4.6, "reviewCount": 2400, "openingHours": "09:00 AM - 05:30 PM", "latitude": 34.0837, "longitude": 74.7973 },
                       "travelToNext": { "distanceLabel": "1.8 km", "durationLabel": "8 mins", "transportMode": "Drive" }
                     }
                   ]
@@ -339,10 +344,14 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 val costLabel = itemObj.optString("costLabel", "₹0")
 
                 val placeDetails = itemObj.optJSONObject("placeDetails")?.let { p ->
+                    val lat = if (p.has("latitude") && !p.isNull("latitude")) p.optDouble("latitude").takeIf { !it.isNaN() && it != 0.0 } else null
+                    val lng = if (p.has("longitude") && !p.isNull("longitude")) p.optDouble("longitude").takeIf { !it.isNaN() && it != 0.0 } else null
                     PlaceDetails(
                         rating = p.optDouble("rating", 4.5),
                         reviewCount = p.optInt("reviewCount", 1200),
-                        openingHours = p.optString("openingHours", "9:00 AM - 6:00 PM")
+                        openingHours = p.optString("openingHours", "9:00 AM - 6:00 PM"),
+                        latitude = lat,
+                        longitude = lng
                     )
                 } ?: PlaceDetails()
 
@@ -496,11 +505,56 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { persistPlan(updatedPlan) }
     }
 
+    fun syncExpensesFromCloud() {
+        val plan = _tripPlan.value ?: return
+        val tripId = plan.supabaseTripId ?: return
+        viewModelScope.launch {
+            try {
+                val cloudExpenses = expenseRepository.listExpenses(tripId)
+                if (cloudExpenses.isNotEmpty()) {
+                    val entries = cloudExpenses.map { row ->
+                        val cat = runCatching {
+                            ExpenseCategory.valueOf(row.category ?: "OTHER")
+                        }.getOrDefault(ExpenseCategory.OTHER)
+                        BudgetEntry(
+                            id = row.id ?: java.util.UUID.randomUUID().toString(),
+                            title = row.description,
+                            amount = kotlin.math.round(row.amount).toInt(),
+                            category = cat,
+                            dayNumber = null,
+                            paidBy = row.paidBy
+                        )
+                    }
+                    val current = _tripPlan.value ?: return@launch
+                    val updated = current.copy(customExpenses = entries)
+                    _tripPlan.value = updated
+                    persistPlan(updated)
+                }
+            } catch (_: Exception) { }
+        }
+    }
+
     fun addExpense(entry: BudgetEntry) {
         val plan = _tripPlan.value ?: return
+        val uid = authRepository.currentUserId()
+        val tripId = plan.supabaseTripId
         val updatedPlan = plan.copy(customExpenses = plan.customExpenses + entry)
         _tripPlan.value = updatedPlan
-        viewModelScope.launch { persistPlan(updatedPlan) }
+        viewModelScope.launch {
+            persistPlan(updatedPlan)
+            if (uid != null && tripId != null) {
+                try {
+                    expenseRepository.addExpenseEqualSplit(
+                        tripId = tripId,
+                        paidBy = uid,
+                        description = entry.title,
+                        amount = entry.amount.toDouble(),
+                        category = entry.category.name
+                    )
+                    syncExpensesFromCloud()
+                } catch (_: Exception) { }
+            }
+        }
     }
 
     fun updateExpense(entry: BudgetEntry) {
@@ -513,31 +567,300 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
 
     fun deleteExpense(entryId: String) {
         val plan = _tripPlan.value ?: return
+        val tripId = plan.supabaseTripId
         val updatedExpenses = plan.customExpenses.filterNot { it.id == entryId }
         val updatedPlan = plan.copy(customExpenses = updatedExpenses)
         _tripPlan.value = updatedPlan
-        viewModelScope.launch { persistPlan(updatedPlan) }
+        viewModelScope.launch {
+            persistPlan(updatedPlan)
+            if (tripId != null) {
+                try {
+                    expenseRepository.deleteExpense(entryId)
+                    syncExpensesFromCloud()
+                } catch (_: Exception) { }
+            }
+        }
     }
 
     private suspend fun persistPlan(plan: TripPlan) {
         val uid = authRepository.currentUserId()
-        repository.save(plan, uid)
+        if (uid != null) {
+            // Never persist a plan belonging to another user under this user's storage
+            if (plan.userId != null && plan.userId != uid) return
+            val planWithUser = if (plan.userId == null) plan.copy(userId = uid) else plan
+            repository.save(planWithUser, uid)
+            historyRepository.updateOrAppend(planWithUser, uid)
+            if (planWithUser.supabaseTripId != null) {
+                try {
+                    collaborativeRepo.syncTripToCloud(planWithUser, uid)
+                } catch (_: Exception) { }
+            }
+        } else {
+            // Guest mode: never overwrite with a registered user's plan
+            if (plan.userId != null && plan.userId != "guest") return
+            val guestPlan = plan.copy(userId = "guest")
+            repository.save(guestPlan, null)
+            historyRepository.updateOrAppend(guestPlan, null)
+        }
+    }
+
+    fun castVote(dayIndex: Int, itemId: String, voteType: String) {
+        val plan = _tripPlan.value ?: return
+        val day = plan.days.getOrNull(dayIndex) ?: return
+        val itemIndex = day.items.indexOfFirst { it.id == itemId }
+        if (itemIndex < 0) return
+        val item = day.items[itemIndex]
+
+        val currentVote = item.votes.userVote
+        val newVoteType = if (currentVote == voteType) null else voteType
+        val upDelta = when {
+            currentVote == "UP" && newVoteType == null -> -1
+            currentVote == "DOWN" && newVoteType == "UP" -> 1
+            currentVote == null && newVoteType == "UP" -> 1
+            else -> 0
+        }
+        val downDelta = when {
+            currentVote == "DOWN" && newVoteType == null -> -1
+            currentVote == "UP" && newVoteType == "DOWN" -> 1
+            currentVote == null && newVoteType == "DOWN" -> 1
+            else -> 0
+        }
+
+        val updatedVotes = item.votes.copy(
+            upvotes = (item.votes.upvotes + upDelta).coerceAtLeast(0),
+            downvotes = (item.votes.downvotes + downDelta).coerceAtLeast(0),
+            userVote = newVoteType
+        )
+        val updatedItem = item.copy(votes = updatedVotes)
+        val newDayItems = day.items.toMutableList().also { it[itemIndex] = updatedItem }
+        val newDays = plan.days.toMutableList().also { it[dayIndex] = day.copy(items = newDayItems) }
+        val updatedPlan = plan.copy(days = newDays)
+        _tripPlan.value = updatedPlan
+
+        viewModelScope.launch {
+            persistPlan(updatedPlan)
+            val uid = authRepository.currentUserId()
+            val tripId = plan.supabaseTripId
+            if (uid != null && tripId != null) {
+                try {
+                    collaborativeRepo.castVote(tripId, itemId, uid, voteType)
+                } catch (_: Exception) { }
+            }
+        }
+    }
+
+    fun syncVotesFromCloud() {
+        val plan = _tripPlan.value ?: return
+        val tripId = plan.supabaseTripId ?: return
+        val uid = authRepository.currentUserId()
+        viewModelScope.launch {
+            try {
+                val cloudVotes = collaborativeRepo.getVotesForTrip(tripId, uid)
+                if (cloudVotes.isNotEmpty()) {
+                    val updatedDays = plan.days.map { day ->
+                        val updatedItems = day.items.map { item ->
+                            val v = cloudVotes[item.id]
+                            if (v != null) item.copy(votes = v) else item
+                        }
+                        day.copy(items = updatedItems)
+                    }
+                    val updatedPlan = plan.copy(days = updatedDays)
+                    _tripPlan.value = updatedPlan
+                    persistPlan(updatedPlan)
+                }
+            } catch (_: Exception) { }
+        }
+    }
+
+    fun loadTripMembers() {
+        val tripId = _tripPlan.value?.supabaseTripId ?: return
+        viewModelScope.launch {
+            try {
+                val list = collaborativeRepo.listMembers(tripId)
+                _tripMembers.value = list
+            } catch (_: Exception) { }
+        }
+    }
+
+    fun isLoggedIn(): Boolean = authRepository.currentUserId() != null
+
+    suspend fun ensureTripSyncedToCloud(): String? {
+        val plan = _tripPlan.value ?: return null
+        val uid = authRepository.currentUserId() ?: return null
+        if (!plan.supabaseTripId.isNullOrBlank()) {
+            loadTripMembers()
+            return plan.supabaseTripId
+        }
+
+        val newTripId = collaborativeRepo.syncTripToCloud(plan, uid)
+        if (newTripId != null) {
+            val updated = plan.copy(supabaseTripId = newTripId)
+            _tripPlan.value = updated
+            persistPlan(updated)
+            loadTripMembers()
+            return newTripId
+        }
+        // Fallback to local plan id so invite links and codes can always be generated
+        return plan.supabaseTripId ?: plan.id
+    }
+
+    fun joinTripByCodeOrLink(input: String, onResult: (Boolean, String?) -> Unit) {
+        val uid = authRepository.currentUserId()
+        if (uid == null) {
+            onResult(false, "Please sign in to join a trip with companions.")
+            return
+        }
+        viewModelScope.launch {
+            // Pass local trips as fallback for local testing across accounts on device
+            val localTrips = historyRepository.loadAll(null) + historyRepository.loadAll(uid)
+            val result = collaborativeRepo.joinTrip(input, uid, localTrips)
+            result.fold(
+                onSuccess = { joinedPlan ->
+                    loadTrip(joinedPlan)
+                    historyRepository.updateOrAppend(joinedPlan, uid)
+                    onResult(true, "Joined trip to ${joinedPlan.destination}!")
+                },
+                onFailure = { error ->
+                    onResult(false, error.message ?: "Failed to join trip")
+                }
+            )
+        }
+    }
+
+    fun inviteMember(email: String, onComplete: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            val plan = _tripPlan.value ?: run {
+                onComplete(false, "No active trip to invite members to")
+                return@launch
+            }
+            val tripId = ensureTripSyncedToCloud() ?: run {
+                onComplete(false, "Could not sync trip with cloud. Please ensure you are logged in.")
+                return@launch
+            }
+            try {
+                val success = collaborativeRepo.inviteMember(tripId, email)
+                if (success) {
+                    val members = collaborativeRepo.listMembers(tripId)
+                    _tripMembers.value = members
+                    val updatedPlan = plan.copy(isShared = members.size > 1, membersCount = members.size)
+                    _tripPlan.value = updatedPlan
+                    persistPlan(updatedPlan)
+                    onComplete(true, null)
+                } else {
+                    onComplete(false, "No TripMate account found with email '$email'")
+                }
+            } catch (e: Exception) {
+                onComplete(false, e.message ?: "Failed to invite member")
+            }
+        }
+    }
+
+    fun updateTripBudget(newBudget: Int) {
+        val plan = _tripPlan.value ?: return
+        val updated = plan.copy(budget = newBudget)
+        _tripPlan.value = updated
+        viewModelScope.launch {
+            persistPlan(updated)
+            val tripId = updated.supabaseTripId
+            if (tripId != null) {
+                collaborativeRepo.updateBudget(tripId, newBudget)
+            }
+        }
     }
 
     fun loadTrip(plan: TripPlan) {
+        val uid = authRepository.currentUserId()
+        if (uid != null && plan.userId != null && plan.userId != uid && !plan.isShared && plan.supabaseTripId == null) {
+            return
+        }
         _tripPlan.value = plan
         viewModelScope.launch {
             persistPlan(plan)
             resolveMissingCoordinates()
+            syncVotesFromCloud()
+            loadTripMembers()
+            syncExpensesFromCloud()
         }
     }
 
     fun clearTrip() {
         _tripPlan.value = null
+        _tripMembers.value = emptyList()
+        val now = System.currentTimeMillis()
+        _request.value = TripPlanRequest(
+            destination = "",
+            startDateMillis = now + DAY_MILLIS,
+            endDateMillis = now + 4 * DAY_MILLIS
+        )
+    }
+
+    fun resetAndLoadForCurrentUser() {
+        _tripPlan.value = null
+        _tripMembers.value = emptyList()
         viewModelScope.launch {
-            val uid = authRepository.currentUserId()
-            repository.clear(uid)
-            repository.clear(null)
+            val isGuestMode = guestManager.isGuest()
+            val uid = if (isGuestMode) null else authRepository.currentUserId()
+
+            if (uid != null) {
+                // Fetch validated trips for this user (both local and shared cloud trips)
+                val localTrips = historyRepository.loadAll(uid).filter { it.userId == uid }
+                val cloudTrips = try {
+                    collaborativeRepo.fetchSharedTrips(uid)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                val allUserTrips = (cloudTrips + localTrips).distinctBy { it.supabaseTripId ?: it.id }
+
+                val saved = repository.load(uid)
+                if (saved != null) {
+                    // Strictly verify that the saved plan belongs to this user AND exists in their trip history / cloud
+                    val isOwned = (saved.userId == uid || cloudTrips.any { it.supabaseTripId == saved.supabaseTripId }) &&
+                            allUserTrips.any { it.id == saved.id || it.destination.equals(saved.destination, ignoreCase = true) }
+
+                    if (isOwned) {
+                        _tripPlan.value = saved
+                        resolveMissingCoordinates()
+                        syncVotesFromCloud()
+                        loadTripMembers()
+                        syncExpensesFromCloud()
+                    } else {
+                        // Purge cross-contaminated or orphaned plan from DataStore
+                        repository.clear(uid)
+                        val legitimateUpcoming = allUserTrips.firstOrNull()
+                        _tripPlan.value = legitimateUpcoming
+                        if (legitimateUpcoming != null) {
+                            repository.save(legitimateUpcoming, uid)
+                            resolveMissingCoordinates()
+                            syncVotesFromCloud()
+                            loadTripMembers()
+                            syncExpensesFromCloud()
+                        }
+                    }
+                } else {
+                    val legitimateUpcoming = allUserTrips.firstOrNull()
+                    _tripPlan.value = legitimateUpcoming
+                    if (legitimateUpcoming != null) {
+                        repository.save(legitimateUpcoming, uid)
+                        resolveMissingCoordinates()
+                        syncVotesFromCloud()
+                        loadTripMembers()
+                        syncExpensesFromCloud()
+                    }
+                }
+            } else if (isGuestMode) {
+                val guestTrips = historyRepository.loadAll(null).filter { it.userId == null || it.userId == "guest" }
+                val saved = repository.load(null)
+                if (saved != null && (saved.userId == null || saved.userId == "guest")) {
+                    _tripPlan.value = saved
+                    resolveMissingCoordinates()
+                } else {
+                    val fallback = guestTrips.firstOrNull()
+                    _tripPlan.value = fallback
+                    if (fallback != null) repository.save(fallback, null)
+                }
+            } else {
+                _tripPlan.value = null
+            }
         }
     }
 

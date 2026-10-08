@@ -50,12 +50,60 @@ private val TripMateLightColorScheme = lightColorScheme(
     outlineVariant = OutlineVariant,
 )
 
+// Modern sleek dark color scheme based on slate-900 & coral orange
+private val TripMateDarkColorScheme = androidx.compose.material3.darkColorScheme(
+    primary = PrimaryColor,
+    onPrimary = OnPrimary,
+    primaryContainer = PrimaryContainer,
+    onPrimaryContainer = OnPrimaryContainer,
+    inversePrimary = InversePrimary,
+
+    secondary = SecondaryColor,
+    onSecondary = OnSecondary,
+    secondaryContainer = SecondaryContainer,
+    onSecondaryContainer = OnSecondaryContainer,
+
+    tertiary = TertiaryColor,
+    onTertiary = OnTertiary,
+    tertiaryContainer = TertiaryContainer,
+    onTertiaryContainer = OnTertiaryContainer,
+
+    background = androidx.compose.ui.graphics.Color(0xFF0F172A),
+    onBackground = androidx.compose.ui.graphics.Color(0xFFF8FAFC),
+
+    surface = androidx.compose.ui.graphics.Color(0xFF1E293B),
+    onSurface = androidx.compose.ui.graphics.Color(0xFFF8FAFC),
+    surfaceVariant = androidx.compose.ui.graphics.Color(0xFF334155),
+    onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFF94A3B8),
+    surfaceTint = SurfaceTint,
+    inverseSurface = androidx.compose.ui.graphics.Color(0xFFF8FAFC),
+    inverseOnSurface = androidx.compose.ui.graphics.Color(0xFF0F172A),
+
+    surfaceDim = androidx.compose.ui.graphics.Color(0xFF0F172A),
+    surfaceBright = androidx.compose.ui.graphics.Color(0xFF1E293B),
+    surfaceContainerLowest = androidx.compose.ui.graphics.Color(0xFF0B1120),
+    surfaceContainerLow = androidx.compose.ui.graphics.Color(0xFF0F172A),
+    surfaceContainer = androidx.compose.ui.graphics.Color(0xFF1E293B),
+    surfaceContainerHigh = androidx.compose.ui.graphics.Color(0xFF334155),
+    surfaceContainerHighest = androidx.compose.ui.graphics.Color(0xFF475569),
+
+    error = ErrorColor,
+    onError = OnError,
+    errorContainer = ErrorContainer,
+    onErrorContainer = OnErrorContainer,
+
+    outline = androidx.compose.ui.graphics.Color(0xFF334155),
+    outlineVariant = androidx.compose.ui.graphics.Color(0xFF1E293B),
+)
+
 @Composable
 fun TripMateTheme(
+    darkTheme: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val colorScheme = if (darkTheme) TripMateDarkColorScheme else TripMateLightColorScheme
     MaterialTheme(
-        colorScheme = TripMateLightColorScheme,
+        colorScheme = colorScheme,
         typography = TripMateTypography,
         shapes = TripMateShapes,
         content = content

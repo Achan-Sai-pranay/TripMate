@@ -49,6 +49,14 @@ data class DiningOption(
     val rating: Double = 4.5
 )
 
+data class ActivityVote(
+    val upvotes: Int = 0,
+    val downvotes: Int = 0,
+    val userVote: String? = null // null | "UP" | "DOWN"
+) {
+    val netScore: Int get() = upvotes - downvotes
+}
+
 data class ItineraryDay(
     val dayNumber: Int,
     val dateLabel: String, // e.g. "Oct 12"
@@ -56,6 +64,7 @@ data class ItineraryDay(
 )
 
 data class ItineraryItem(
+    val id: String = java.util.UUID.randomUUID().toString(),
     val time: String,
     val title: String,
     val durationLabel: String,
@@ -82,7 +91,11 @@ data class ItineraryItem(
     /**
      * Expense category for budget breakdown and analytics.
      */
-    val category: ExpenseCategory = ExpenseCategory.ACTIVITIES
+    val category: ExpenseCategory = ExpenseCategory.ACTIVITIES,
+    /**
+     * Collaborative group voting data for this activity.
+     */
+    val votes: ActivityVote = ActivityVote()
 ) {
     val geocodeQuery: String? get() = (placeName?.takeIf { it.isNotBlank() } ?: title).trim().takeIf { it.isNotBlank() }
     val hasCoordinates: Boolean get() = placeDetails?.latitude != null && placeDetails.longitude != null

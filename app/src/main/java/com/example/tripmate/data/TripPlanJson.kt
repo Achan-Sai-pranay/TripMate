@@ -22,6 +22,7 @@ object TripPlanJson {
             val itemsArray = JSONArray()
             day.items.forEach { item ->
                 val itemObj = JSONObject().apply {
+                    put("id", item.id)
                     put("time", item.time)
                     put("title", item.title)
                     put("durationLabel", item.durationLabel)
@@ -33,6 +34,11 @@ object TripPlanJson {
                     put("isFixed", item.isFixed)
                     item.placeName?.let { put("placeName", it) }
                     item.wikipediaTitle?.let { put("wikipediaTitle", it) }
+                    put("votes", JSONObject().apply {
+                        put("upvotes", item.votes.upvotes)
+                        put("downvotes", item.votes.downvotes)
+                        put("userVote", item.votes.userVote ?: JSONObject.NULL)
+                    })
                 }
 
                 item.placeDetails?.let { place ->
@@ -95,10 +101,13 @@ object TripPlanJson {
                 put("amount", exp.amount)
                 put("category", exp.category.name)
                 exp.dayNumber?.let { put("dayNumber", it) }
+                exp.paidBy?.let { put("paidBy", it) }
             })
         }
 
         return JSONObject().apply {
+            put("id", plan.id)
+            put("userId", plan.userId ?: JSONObject.NULL)
             put("destination", plan.destination)
             put("dateRangeLabel", plan.dateRangeLabel)
             put("travelerCount", plan.travelerCount)
@@ -108,6 +117,8 @@ object TripPlanJson {
             put("stays", staysArray)
             put("dining", diningArray)
             put("supabaseTripId", plan.supabaseTripId ?: JSONObject.NULL)
+            put("isShared", plan.isShared)
+            put("membersCount", plan.membersCount)
             put("customExpenses", customExpensesArray)
         }
     }
@@ -120,6 +131,7 @@ object TripPlanJson {
             val itemsArray = dayObj.getJSONArray("items")
             val items = (0 until itemsArray.length()).map { j ->
                 val itemObj = itemsArray.getJSONObject(j)
+                val itemId = itemObj.optString("id", java.util.UUID.randomUUID().toString())
                 val title = itemObj.getString("title")
                 val costLabel = itemObj.optString("costLabel", "₹0")
 
@@ -151,7 +163,16 @@ object TripPlanJson {
                     runCatching { ExpenseCategory.valueOf(catStr) }.getOrNull()
                 } ?: ActivityIconMapper.categoryFor(title)
 
+                val itemVotes = itemObj.optJSONObject("votes")?.let { v ->
+                    com.example.tripmate.model.ActivityVote(
+                        upvotes = v.optInt("upvotes", 0),
+                        downvotes = v.optInt("downvotes", 0),
+                        userVote = v.optString("userVote").takeIf { it.isNotBlank() && it != "null" }
+                    )
+                } ?: com.example.tripmate.model.ActivityVote()
+
                 ItineraryItem(
+                    id = itemId,
                     time = itemObj.getString("time"),
                     title = title,
                     durationLabel = itemObj.optString("durationLabel", "1h"),
@@ -165,7 +186,8 @@ object TripPlanJson {
                     placeDetails = placeDetails,
                     travelToNext = travelLeg,
                     placeName = if (itemObj.has("placeName")) itemObj.optString("placeName").takeIf { it.isNotBlank() && it != "null" } else null,
-                    wikipediaTitle = itemObj.optString("wikipediaTitle").takeIf { it.isNotBlank() && it != "null" }
+                    wikipediaTitle = itemObj.optString("wikipediaTitle").takeIf { it.isNotBlank() && it != "null" },
+                    votes = itemVotes
                 )
             }
             ItineraryDay(
@@ -211,12 +233,15 @@ object TripPlanJson {
                     title = ce.getString("title"),
                     amount = ce.getInt("amount"),
                     category = cat,
-                    dayNumber = if (ce.has("dayNumber") && !ce.isNull("dayNumber")) ce.getInt("dayNumber") else null
+                    dayNumber = if (ce.has("dayNumber") && !ce.isNull("dayNumber")) ce.getInt("dayNumber") else null,
+                    paidBy = ce.optString("paidBy").takeIf { it.isNotBlank() && it != "null" }
                 )
             }
         } ?: emptyList()
 
         return TripPlan(
+            id = root.optString("id", java.util.UUID.randomUUID().toString()),
+            userId = root.optString("userId").takeIf { it.isNotBlank() && it != "null" },
             destination = root.getString("destination"),
             dateRangeLabel = root.getString("dateRangeLabel"),
             travelerCount = travelerCount,
@@ -226,6 +251,8 @@ object TripPlanJson {
             stays = stays,
             dining = dining,
             supabaseTripId = root.optString("supabaseTripId").takeIf { it.isNotBlank() && it != "null" },
+            isShared = root.optBoolean("isShared", false),
+            membersCount = root.optInt("membersCount", 1),
             customExpenses = customExpenses
         )
     }

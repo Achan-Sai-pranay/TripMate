@@ -20,6 +20,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.launch
 import com.example.tripmate.ui.theme.Dimens
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,9 +37,14 @@ fun AccountSettingsScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var isDarkMode by remember { mutableStateOf(true) }
-    var pushNotifications by remember { mutableStateOf(true) }
-    var emailNotifications by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val userPrefs = remember { com.example.tripmate.data.UserPreferencesRepository(context.applicationContext) }
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+
+    val darkModePref by userPrefs.darkModeFlow.collectAsState(initial = "LIGHT")
+    val pushNotifications by userPrefs.pushNotificationsFlow.collectAsState(initial = true)
+    val emailNotifications by userPrefs.emailNotificationsFlow.collectAsState(initial = false)
+    val isDarkMode = darkModePref == "DARK"
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -63,24 +70,36 @@ fun AccountSettingsScreen(
             SettingSection(title = "Appearance") {
                 SettingToggleRow(
                     label = "Dark Mode",
-                    description = "Enable dark theme",
+                    description = "Enable modern dark theme",
                     checked = isDarkMode,
-                    onCheckedChange = { isDarkMode = it }
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            userPrefs.setDarkMode(if (enabled) "DARK" else "LIGHT")
+                        }
+                    }
                 )
             }
             
             SettingSection(title = "Notifications") {
                 SettingToggleRow(
                     label = "Push Notifications",
-                    description = "Get notified about your trip updates",
+                    description = "Get notified about your trip updates and votes",
                     checked = pushNotifications,
-                    onCheckedChange = { pushNotifications = it }
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            userPrefs.setPushNotifications(enabled)
+                        }
+                    }
                 )
                 SettingToggleRow(
                     label = "Email Updates",
-                    description = "Receive weekly travel tips",
+                    description = "Receive weekly travel tips and itinerary invites",
                     checked = emailNotifications,
-                    onCheckedChange = { emailNotifications = it }
+                    onCheckedChange = { enabled ->
+                        coroutineScope.launch {
+                            userPrefs.setEmailNotifications(enabled)
+                        }
+                    }
                 )
             }
             

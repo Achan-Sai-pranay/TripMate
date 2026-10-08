@@ -5,7 +5,8 @@ data class BudgetEntry(
     val title: String,
     val amount: Int,
     val category: ExpenseCategory,
-    val dayNumber: Int? = null
+    val dayNumber: Int? = null,
+    val paidBy: String? = null
 )
 
 data class TripPlanRequest(
@@ -22,6 +23,8 @@ data class TripPlanRequest(
 )
 
 data class TripPlan(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val userId: String? = null,
     val destination: String,
     val dateRangeLabel: String,
     val travelerCount: Int,
@@ -30,6 +33,8 @@ data class TripPlan(
     val days: List<ItineraryDay>,
     val stays: List<StayOption> = emptyList(),
     val dining: List<DiningOption> = emptyList(),
-    val supabaseTripId: String? = null, // links to the `trips` table row for expense tracking
+    val supabaseTripId: String? = null, // links to the `trips` table row for expense tracking and multi-user collaboration
+    val isShared: Boolean = false,
+    val membersCount: Int = 1,
     val customExpenses: List<BudgetEntry> = emptyList()
 )

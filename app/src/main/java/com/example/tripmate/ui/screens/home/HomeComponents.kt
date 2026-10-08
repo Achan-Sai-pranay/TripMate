@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,15 +26,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.HowToVote
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -46,26 +54,30 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.tripmate.model.TripPlan
 import com.example.tripmate.ui.theme.Dimens
 import com.example.tripmate.ui.theme.OutlineVariant
 
 @Composable
 fun HomeHeader(
-    userAvatarUrl: String,
+    userName: String = "Traveler",
+    userAvatarUrl: String = "",
     onAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val greeting = remember {
+    val greeting = remember(userName) {
         val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-        when (hour) {
-            in 4..11 -> "Good morning, Traveler \uD83D\uDC4B"
-            in 12..16 -> "Good afternoon, Traveler \uD83D\uDC4B"
-            in 17..21 -> "Good evening, Traveler \uD83D\uDC4B"
-            else -> "Good night, Traveler \uD83D\uDC4B"
+        val timeLabel = when (hour) {
+            in 4..11 -> "Good morning"
+            in 12..16 -> "Good afternoon"
+            in 17..21 -> "Good evening"
+            else -> "Good night"
         }
+        "$timeLabel, $userName \uD83D\uDC4B"
     }
 
     Row(
@@ -85,16 +97,51 @@ fun HomeHeader(
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
-        AsyncImage(
-            model = userAvatarUrl,
-            contentDescription = "Profile avatar",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .clickable { onAvatarClick() }
-                .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
-        )
+        if (userAvatarUrl.isNotBlank()) {
+            AsyncImage(
+                model = userAvatarUrl,
+                contentDescription = "Profile avatar",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .clickable { onAvatarClick() }
+                    .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+            )
+        } else {
+            // Elegant gradient initials badge
+            val initials = remember(userName) {
+                userName.trim().split(" ")
+                    .filter { it.isNotBlank() }
+                    .take(2)
+                    .map { it.first().uppercase() }
+                    .joinToString("")
+                    .ifBlank { "T" }
+            }
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                com.example.tripmate.ui.theme.PrimaryOrange,
+                                com.example.tripmate.ui.theme.PrimaryOrangeVariant
+                            )
+                        )
+                    )
+                    .clickable { onAvatarClick() }
+                    .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = initials,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        }
     }
 }
 
@@ -526,6 +573,210 @@ fun BudgetGemsSheet(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GroupVotingSheet(
+    tripPlan: TripPlan?,
+    onDismiss: () -> Unit,
+    onVote: (dayIndex: Int, itemId: String, isUpvote: Boolean) -> Unit,
+    onPlanNewTrip: () -> Unit,
+    onViewItinerary: () -> Unit
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Dimens.lg)
+                .padding(bottom = Dimens.xl)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(Dimens.md)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Group Voting",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (tripPlan != null) "Ranked activities for ${tripPlan.destination}" else "Collaborative decision making",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(Dimens.radiusFull),
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text = "Live Sync",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            if (tripPlan == null || tripPlan.days.isEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(Dimens.radiusCard),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(Dimens.xl),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(Dimens.sm)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.HowToVote,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Text(
+                            text = "No Active Itinerary Loaded",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Plan a trip or load one from My Trips to vote on stops with your travel companions.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Button(
+                            onClick = { onDismiss(); onPlanNewTrip() },
+                            shape = RoundedCornerShape(Dimens.radiusFull),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text("Plan a Trip with AI")
+                        }
+                    }
+                }
+            } else {
+                val rankedItems = remember(tripPlan) {
+                    tripPlan.days.flatMapIndexed { dayIdx, day ->
+                        day.items.map { item -> Triple(dayIdx, day.dayNumber, item) }
+                    }.sortedByDescending { it.third.votes.netScore }
+                }
+
+                Text(
+                    text = "Vote on activities to build consensus. Top picks bubble to the top for the whole group.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                rankedItems.forEachIndexed { rank, (dayIdx, dayNumber, item) ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(Dimens.radiusMd),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(Dimens.md),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = Dimens.md)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "#${rank + 1}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (rank == 0) Color(0xFFFFB800) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "Day $dayNumber • ${item.time}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(
+                                    text = item.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (item.whyThis.isNotBlank()) {
+                                    Text(
+                                        text = item.whyThis,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            // Voting Buttons
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                val isUp = item.votes.userVote == "UP"
+                                IconButton(
+                                    onClick = { onVote(dayIdx, item.id, true) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ThumbUp,
+                                        contentDescription = "Upvote",
+                                        tint = if (isUp) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "${item.votes.netScore}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when {
+                                        item.votes.netScore > 0 -> Color(0xFF10B981)
+                                        item.votes.netScore < 0 -> Color(0xFFEF4444)
+                                        else -> MaterialTheme.colorScheme.onSurface
+                                    },
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                )
+                                val isDown = item.votes.userVote == "DOWN"
+                                IconButton(
+                                    onClick = { onVote(dayIdx, item.id, false) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ThumbDown,
+                                        contentDescription = "Downvote",
+                                        tint = if (isDown) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = { onDismiss(); onViewItinerary() },
+                    modifier = Modifier.fillMaxWidth().padding(top = Dimens.sm),
+                    shape = RoundedCornerShape(Dimens.radiusFull),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("View Full Itinerary & Map")
                 }
             }
         }

@@ -76,13 +76,66 @@ object GeocodingHelper {
         return point
     }
 
-    /** Deterministic fallback coordinate near destination center if a specific venue cannot be resolved. */
+    private val KNOWN_DESTINATIONS = mapOf(
+        "kashmir" to GeoPoint(34.0837, 74.7973),
+        "srinagar" to GeoPoint(34.0837, 74.7973),
+        "gulmarg" to GeoPoint(34.0484, 74.3805),
+        "pahalgam" to GeoPoint(34.0161, 75.3150),
+        "sonamarg" to GeoPoint(34.3056, 75.2952),
+        "murudeshwar" to GeoPoint(14.0942, 74.4842),
+        "bhatkal" to GeoPoint(13.9875, 74.5516),
+        "gokarna" to GeoPoint(14.5479, 74.3188),
+        "goa" to GeoPoint(15.2993, 74.1240),
+        "manali" to GeoPoint(32.2432, 77.1892),
+        "ladakh" to GeoPoint(34.1526, 77.5771),
+        "leh" to GeoPoint(34.1526, 77.5771),
+        "kerala" to GeoPoint(9.9312, 76.2673),
+        "alleppey" to GeoPoint(9.4981, 76.3388),
+        "munnar" to GeoPoint(10.0889, 77.0595),
+        "jaipur" to GeoPoint(26.9124, 75.7873),
+        "udaipur" to GeoPoint(24.5854, 73.7125),
+        "jodhpur" to GeoPoint(26.2389, 73.0243),
+        "agra" to GeoPoint(27.1767, 78.0081),
+        "shimla" to GeoPoint(31.1048, 77.1734),
+        "ooty" to GeoPoint(11.4102, 76.6950),
+        "coorg" to GeoPoint(12.3375, 75.8069),
+        "hampi" to GeoPoint(15.3350, 76.4600),
+        "rishikesh" to GeoPoint(30.0869, 78.2676),
+        "varanasi" to GeoPoint(25.3176, 82.9739),
+        "paris" to GeoPoint(48.8566, 2.3522),
+        "tokyo" to GeoPoint(35.6762, 139.6503),
+        "bali" to GeoPoint(-8.4095, 115.1889),
+        "dubai" to GeoPoint(25.2048, 55.2708),
+        "singapore" to GeoPoint(1.3521, 103.8198),
+        "bangkok" to GeoPoint(13.7563, 100.5018),
+        "rome" to GeoPoint(41.9028, 12.4964),
+        "london" to GeoPoint(51.5074, -0.1278),
+        "new york" to GeoPoint(40.7128, -74.0060)
+    )
+
+    fun getKnownCenter(rawDestination: String): GeoPoint? {
+        val lower = rawDestination.lowercase(Locale.ROOT)
+        for ((key, pt) in KNOWN_DESTINATIONS) {
+            if (lower.contains(key)) return pt
+        }
+        return null
+    }
+
+    /** Deterministic 2D organic scatter near destination center if a specific venue cannot be resolved. */
     fun fallbackPoint(rawDestination: String, index: Int = 0): GeoPoint? {
         val destination = rawDestination.replace(Regex("""\(.*?\)"""), "").trim().lowercase(Locale.ROOT)
-        val area = areaCache[destination] ?: areaCache.values.firstOrNull() ?: return null
-        val offsetLat = ((index % 5) - 2) * 0.005
-        val offsetLng = (((index / 5) % 5) - 2) * 0.005
-        return GeoPoint(area.center.lat + offsetLat, area.center.lng + offsetLng)
+        val center = areaCache[destination]?.center
+            ?: getKnownCenter(destination)
+            ?: areaCache.values.firstOrNull()?.center
+            ?: return null
+
+        // Golden angle spiral distribution ensures pins scatter naturally in 2D with zero collinear straight lines
+        val angle = (index * 137.5) * (Math.PI / 180.0)
+        val radiusKm = 1.2 + ((index * 1.9) % 8.5)
+        val offsetLat = (radiusKm / 111.0) * kotlin.math.cos(angle)
+        val cosLat = kotlin.math.cos(Math.toRadians(center.lat)).coerceAtLeast(0.15)
+        val offsetLng = (radiusKm / (111.0 * cosLat)) * kotlin.math.sin(angle)
+        return GeoPoint(center.lat + offsetLat, center.lng + offsetLng)
     }
 
     fun cleanPlaceName(raw: String): List<String> {
@@ -156,13 +209,19 @@ object GeocodingHelper {
         return try {
             val query = if (destination.isBlank()) name else "$name, $destination"
             val viewbox = area?.let {
-                // Widen the destination box so nearby sights (forts, falls) are still ranked first.
                 val padLat = (it.north - it.south).coerceAtLeast(0.2) * 0.5
                 val padLng = (it.east - it.west).coerceAtLeast(0.2) * 0.5
                 "&viewbox=${it.west - padLng},${it.north + padLat},${it.east + padLng},${it.south - padLat}"
             }.orEmpty()
-            val results = nominatim("q=${enc(query)}&format=json&limit=5$viewbox") ?: return null
-            pickBest(results, area)
+            val results = nominatim("q=${enc(query)}&format=json&limit=5$viewbox")
+            val best = results?.let { pickBest(it, area) }
+            if (best != null) return best
+
+            // Fallback: search place name alone with area boundary filter
+            if (destination.isNotBlank()) {
+                val soloResults = nominatim("q=${enc(name)}&format=json&limit=5$viewbox")
+                soloResults?.let { pickBest(it, area) }
+            } else null
         } catch (e: Exception) {
             Log.w(TAG, "Nominatim failed for '$name'", e)
             null
@@ -185,9 +244,17 @@ object GeocodingHelper {
             val geocoder = Geocoder(context, Locale.getDefault())
             val query = if (destination.isBlank()) name else "$name, $destination"
             val addresses = geocoder.getFromLocationName(query, 5).orEmpty()
-            addresses.asSequence()
+            val best = addresses.asSequence()
                 .map { GeoPoint(it.latitude, it.longitude) }
                 .firstOrNull { area == null || distanceKm(area.center, it) <= MAX_KM_FROM_DESTINATION }
+            if (best != null) return best
+
+            // Fallback: search name alone
+            if (destination.isNotBlank()) {
+                geocoder.getFromLocationName(name, 5).orEmpty().asSequence()
+                    .map { GeoPoint(it.latitude, it.longitude) }
+                    .firstOrNull { area == null || distanceKm(area.center, it) <= MAX_KM_FROM_DESTINATION }
+            } else null
         } catch (e: Exception) {
             Log.w(TAG, "Android Geocoder failed for '$name'", e)
             null

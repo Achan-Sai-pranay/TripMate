@@ -19,6 +19,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     private val profileRepository = ProfileRepository()
     private val guestManager      = GuestModeManager(application)
     private val historyRepository = TripHistoryRepository(application)
+    private val collaborativeRepo = com.example.tripmate.data.CollaborativeTripRepository()
 
     private val _displayName = MutableStateFlow("Traveler")
     val displayName: StateFlow<String> = _displayName.asStateFlow()
@@ -32,7 +33,14 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     private val _tripHistory = MutableStateFlow<List<TripPlan>>(emptyList())
     val tripHistory: StateFlow<List<TripPlan>> = _tripHistory.asStateFlow()
 
+    private val _sharedTrips = MutableStateFlow<List<TripPlan>>(emptyList())
+    val sharedTrips: StateFlow<List<TripPlan>> = _sharedTrips.asStateFlow()
+
     init {
+        loadData()
+    }
+
+    fun loadData() {
         viewModelScope.launch {
             val isGuestMode = guestManager.isGuest()
             _isGuest.value = isGuestMode
@@ -47,7 +55,60 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
                     _email.value = profile?.email ?: authRepository.currentUserEmail().orEmpty()
                 }
             }
-            _tripHistory.value = historyRepository.loadAll(userId)
+
+            val local = historyRepository.loadAll(userId)
+            val cloud = if (userId != null) {
+                try {
+                    collaborativeRepo.fetchSharedTrips(userId)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            } else emptyList()
+
+            // Strict user isolation: only include trips that belong to this account or are shared with this user in the cloud
+            val filteredLocal = if (userId != null) {
+                local.filter { it.userId == userId || cloud.any { c -> c.id == it.id || c.destination.equals(it.destination, ignoreCase = true) } }
+            } else local
+
+            val combined = (cloud + filteredLocal).distinctBy { it.supabaseTripId ?: it.id }
+            _tripHistory.value = combined
+            _sharedTrips.value = combined.filter { it.isShared || it.membersCount > 1 || it.supabaseTripId != null }
+        }
+    }
+
+    suspend fun syncTripToCloud(trip: TripPlan): String? {
+        val uid = authRepository.currentUserId() ?: return null
+        val cloudId = collaborativeRepo.syncTripToCloud(trip, uid)
+        if (cloudId != null) {
+            val updated = trip.copy(supabaseTripId = cloudId)
+            historyRepository.updateOrAppend(updated, uid)
+            loadData()
+            return cloudId
+        }
+        return trip.supabaseTripId ?: trip.id
+    }
+
+    fun inviteMember(tripPlan: TripPlan, email: String, onResult: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            val uid = authRepository.currentUserId() ?: run {
+                onResult(false, "Please sign in to invite members.")
+                return@launch
+            }
+            val tripId = tripPlan.supabaseTripId ?: collaborativeRepo.syncTripToCloud(tripPlan, uid) ?: run {
+                onResult(false, "Could not sync trip with cloud. Please ensure database permissions are granted.")
+                return@launch
+            }
+            try {
+                val ok = collaborativeRepo.inviteMember(tripId, email)
+                if (ok) {
+                    loadData()
+                    onResult(true, null)
+                } else {
+                    onResult(false, "No registered TripMate account found with email '$email'")
+                }
+            } catch (e: Exception) {
+                onResult(false, e.message ?: "Failed to invite member")
+            }
         }
     }
 

@@ -11,6 +11,7 @@ sealed class Screen(val route: String) {
     data object CreateTripConstraints : Screen("create_trip_constraints")
     data object AutoTrackStops : Screen("auto_track_stops")
     data object TripItinerary : Screen("trip_itinerary")
+    data object MyTrips : Screen("my_trips")
     data object AiAssistant : Screen("ai_assistant")
     data object Profile : Screen("profile")
     data object AccountSettings : Screen("account_settings")
