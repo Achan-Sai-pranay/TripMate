@@ -103,6 +103,8 @@ fun TripItineraryScreen(
     var selectedViewTab by remember { mutableStateOf(ItineraryTab.ITINERARY) }
     var currentDayIndex by remember { mutableStateOf(0) }
     var editingItem by remember { mutableStateOf<Pair<Int, ItineraryItem>?>(null) }
+    var showAddActivityDialog by remember { mutableStateOf(false) }
+    var movingItemIndex by remember { mutableStateOf<Int?>(null) }
     // Shared by the itinerary list and the map: the currently highlighted place (pin key)
     var selectedPinKey by remember { mutableStateOf<String?>(null) }
     var focusToken by remember { mutableStateOf(0) }
@@ -302,6 +304,7 @@ fun TripItineraryScreen(
                                             )
                                         }
                                     },
+                                    onAddActivity = { showAddActivityDialog = true },
                                     modifier = Modifier.padding(vertical = Dimens.xs)
                                 )
                             }
@@ -347,6 +350,9 @@ fun TripItineraryScreen(
                                         tripPlanViewModel.castVote(currentDayIndex, item.id, if (isUpvote) "UP" else "DOWN")
                                     },
                                     onEditClick = { editingItem = index to item },
+                                    onMoveUpClick = if (index > 0) { { tripPlanViewModel.moveItemUp(currentDayIndex, index) } } else null,
+                                    onMoveDownClick = if (index < currentDay.items.lastIndex) { { tripPlanViewModel.moveItemDown(currentDayIndex, index) } } else null,
+                                    onMoveToDayClick = if (plan.days.size > 1) { { movingItemIndex = index } } else null,
                                     onReplaceClick = {
                                         aiViewModel.replaceItem(
                                             destination = plan.destination,
@@ -441,6 +447,39 @@ fun TripItineraryScreen(
                             editingItem = null
                         }
                     )
+                }
+
+                if (showAddActivityDialog) {
+                    AddItineraryItemDialog(
+                        dayNumber = currentDay.dayNumber,
+                        onDismiss = { showAddActivityDialog = false },
+                        onAdd = { newItem ->
+                            tripPlanViewModel.addItemToDay(currentDayIndex, newItem)
+                            showAddActivityDialog = false
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Added \"${newItem.title}\" to Day ${currentDay.dayNumber}")
+                            }
+                        }
+                    )
+                }
+
+                movingItemIndex?.let { itemIdx ->
+                    val item = currentDay.items.getOrNull(itemIdx)
+                    if (item != null) {
+                        MoveToDayDialog(
+                            itemTitle = item.title,
+                            totalDays = plan.days.size,
+                            currentDayIndex = currentDayIndex,
+                            onDismiss = { movingItemIndex = null },
+                            onMoveToDay = { targetDayIdx ->
+                                tripPlanViewModel.moveItemToDay(currentDayIndex, itemIdx, targetDayIdx)
+                                movingItemIndex = null
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Moved \"${item.title}\" to Day ${targetDayIdx + 1}")
+                                }
+                            }
+                        )
+                    }
                 }
 
                 if (showInviteSheet) {

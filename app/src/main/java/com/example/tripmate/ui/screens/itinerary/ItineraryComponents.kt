@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,7 +19,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.HealthAndSafety
@@ -282,7 +285,8 @@ fun DaySelector(
     onPreviousDay: () -> Unit,
     onNextDay: () -> Unit,
     modifier: Modifier = Modifier,
-    onOptimizeRoute: (() -> Unit)? = null
+    onOptimizeRoute: (() -> Unit)? = null,
+    onAddActivity: (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -331,6 +335,35 @@ fun DaySelector(
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+            if (onAddActivity != null) {
+                Surface(
+                    shape = RoundedCornerShape(Dimens.radiusFull),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Dimens.radiusFull))
+                        .clickable { onAddActivity() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = "Add Activity",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "+ Activity",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.secondary
                         )
                     }
                 }
@@ -425,7 +458,10 @@ fun TimelineItemRow(
     nextItem: ItineraryItem? = null,
     onVoteClick: ((Boolean) -> Unit)? = null,
     order: Int? = null,
-    dayNumber: Int = 1
+    dayNumber: Int = 1,
+    onMoveUpClick: (() -> Unit)? = null,
+    onMoveDownClick: (() -> Unit)? = null,
+    onMoveToDayClick: (() -> Unit)? = null
 ) {
     // Destination-specific photo: the item's stored image, else a cached/looked-up photo of THIS place.
     // Generic activities (breakfast, free time, check-in...) have no place and keep the plain card.
@@ -658,6 +694,27 @@ fun TimelineItemRow(
                                 }
                                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                                     if (!item.isFixed) {
+                                        if (onMoveUpClick != null) {
+                                            DropdownMenuItem(
+                                                text = { Text("Move Up") },
+                                                leadingIcon = { Icon(Icons.Filled.KeyboardArrowUp, contentDescription = null) },
+                                                onClick = { menuExpanded = false; onMoveUpClick() }
+                                            )
+                                        }
+                                        if (onMoveDownClick != null) {
+                                            DropdownMenuItem(
+                                                text = { Text("Move Down") },
+                                                leadingIcon = { Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null) },
+                                                onClick = { menuExpanded = false; onMoveDownClick() }
+                                            )
+                                        }
+                                        if (onMoveToDayClick != null) {
+                                            DropdownMenuItem(
+                                                text = { Text("Move to Another Day") },
+                                                leadingIcon = { Icon(Icons.Filled.CalendarMonth, contentDescription = null) },
+                                                onClick = { menuExpanded = false; onMoveToDayClick() }
+                                            )
+                                        }
                                         DropdownMenuItem(
                                             text = { Text("Duplicate") },
                                             leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
@@ -1797,6 +1854,206 @@ fun EditItineraryItemDialog(
                 )
             }) { Text("Save") }
         },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+fun AddItineraryItemDialog(
+    dayNumber: Int,
+    onDismiss: () -> Unit,
+    onAdd: (ItineraryItem) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var placeName by remember { mutableStateOf("") }
+    var time by remember { mutableStateOf("10:00 AM") }
+    var duration by remember { mutableStateOf("1.5h") }
+    var cost by remember { mutableStateOf("₹0") }
+    var notes by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf(ExpenseCategory.ACTIVITIES) }
+    var selectedBlock by remember { mutableStateOf(TimeBlock.MORNING) }
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Activity to Day $dayNumber") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Dimens.sm)
+            ) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Activity Title (e.g. Fort Aguada)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = placeName,
+                    onValueChange = { placeName = it },
+                    label = { Text("Place / Location Name (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.sm)) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = time,
+                        onValueChange = { time = it },
+                        label = { Text("Time (e.g. 10:00 AM)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    androidx.compose.material3.OutlinedTextField(
+                        value = duration,
+                        onValueChange = { duration = it },
+                        label = { Text("Duration") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                androidx.compose.material3.OutlinedTextField(
+                    value = cost,
+                    onValueChange = { cost = it },
+                    label = { Text("Cost (e.g. ₹300)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Insider Tip / Notes (optional)") },
+                    singleLine = false,
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text("Time Block:", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TimeBlock.entries.forEach { block ->
+                        FilterChip(
+                            selected = selectedBlock == block,
+                            onClick = { selectedBlock = block },
+                            label = { Text(block.label) }
+                        )
+                    }
+                }
+
+                Text("Category:", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    ExpenseCategory.entries.forEach { cat ->
+                        FilterChip(
+                            selected = selectedCategory == cat,
+                            onClick = { selectedCategory = cat },
+                            label = { Text(cat.label) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.Button(
+                onClick = {
+                    if (title.isBlank()) return@Button
+                    val costNum = com.example.tripmate.util.CostParser.parseRupees(cost)
+                    val formattedCost = if (cost.startsWith("₹")) cost else "₹$cost"
+                    val item = ItineraryItem(
+                        id = java.util.UUID.randomUUID().toString(),
+                        time = time.ifBlank { "10:00 AM" },
+                        title = title.trim(),
+                        durationLabel = duration.ifBlank { "1h" },
+                        costLabel = formattedCost,
+                        costAmount = costNum,
+                        category = selectedCategory,
+                        whyThis = if (notes.isNotBlank()) notes.trim() else "Custom added activity",
+                        icon = com.example.tripmate.util.ActivityIconMapper.iconFor(title),
+                        placeName = placeName.trim().takeIf { it.isNotBlank() },
+                        timeBlock = selectedBlock.name,
+                        notes = notes.trim().takeIf { it.isNotBlank() }
+                    )
+                    onAdd(item)
+                },
+                enabled = title.isNotBlank()
+            ) { Text("Add") }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+fun MoveToDayDialog(
+    itemTitle: String,
+    totalDays: Int,
+    currentDayIndex: Int,
+    onDismiss: () -> Unit,
+    onMoveToDay: (targetDayIndex: Int) -> Unit
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Move Activity") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(Dimens.xs)) {
+                Text(
+                    text = "Select a day to move \"$itemTitle\" to:",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(Dimens.xs))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 260.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    for (i in 0 until totalDays) {
+                        val isCurrent = i == currentDayIndex
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp)
+                                .clip(RoundedCornerShape(Dimens.radiusMd))
+                                .clickable(enabled = !isCurrent) { onMoveToDay(i) },
+                            color = if (isCurrent) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            else MaterialTheme.colorScheme.surfaceContainer,
+                            border = if (isCurrent) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Day ${i + 1}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (isCurrent) FontWeight.Normal else FontWeight.Bold,
+                                    color = if (isCurrent) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                                )
+                                if (isCurrent) {
+                                    Text(
+                                        text = "(Current)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
         dismissButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }
         }
