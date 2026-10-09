@@ -274,14 +274,25 @@ fun TripMateNavGraph(
 
         composable(
             route = Screen.AiAssistant.route,
+            arguments = listOf(
+                navArgument(Screen.AiAssistant.ARG_TRIP_ID) {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            ),
             enterTransition = { fadeIn(tween(200)) },
             exitTransition = { fadeOut(tween(200)) },
             popEnterTransition = { fadeIn(tween(200)) },
             popExitTransition = { fadeOut(tween(200)) }
-        ) {
-            val destination = tripPlanViewModel.tripPlan.collectAsState().value?.destination.orEmpty()
+        ) { backStackEntry ->
+            val tripIdArg = backStackEntry.arguments?.getString(Screen.AiAssistant.ARG_TRIP_ID).orEmpty()
+            val activePlan = tripPlanViewModel.tripPlan.collectAsState().value
+            val prefillTripId = tripIdArg.takeIf { it.isNotBlank() && it != "{tripId}" } ?: activePlan?.id.orEmpty()
+            val destination = activePlan?.destination.orEmpty()
             AiAssistantScreen(
+                initialTripId = prefillTripId,
                 initialDestination = destination,
+                tripPlanViewModel = tripPlanViewModel,
                 onExploreClick = { navController.navigateToTab(Screen.Home.route) },
                 onMyTripsClick = { navController.navigateToTab(Screen.MyTrips.route) },
                 onProfileClick = { navController.navigateToTab(Screen.Profile.route) }

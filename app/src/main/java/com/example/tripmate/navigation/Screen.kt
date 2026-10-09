@@ -12,7 +12,12 @@ sealed class Screen(val route: String) {
     data object AutoTrackStops : Screen("auto_track_stops")
     data object TripItinerary : Screen("trip_itinerary")
     data object MyTrips : Screen("my_trips")
-    data object AiAssistant : Screen("ai_assistant")
+    data object AiAssistant : Screen("ai_assistant?tripId={tripId}") {
+        const val ARG_TRIP_ID = "tripId"
+        fun buildRoute(tripId: String = "") =
+            if (tripId.isBlank()) "ai_assistant"
+            else "ai_assistant?tripId=${java.net.URLEncoder.encode(tripId, "UTF-8")}"
+    }
     data object Profile : Screen("profile")
     data object AccountSettings : Screen("account_settings")
     data object HelpSupport : Screen("help_support")

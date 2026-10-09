@@ -24,3 +24,20 @@ data class AssistantMapRoute(
     val itineraryTitle: String,
     val pins: List<AssistantItineraryPin>
 )
+
+sealed class AssistantContext {
+    data object Global : AssistantContext()
+    data class Trip(val tripPlan: TripPlan) : AssistantContext()
+}
+
+data class ActionablePlace(
+    val dayNumber: Int,
+    val placeName: String,
+    val category: ExpenseCategory = ExpenseCategory.ACTIVITIES,
+    val costLabel: String = "₹0",
+    val costAmount: Int = 0,
+    val time: String = "10:00 AM",
+    val durationLabel: String = "1.5h",
+    val whyThis: String = ""
+)
+

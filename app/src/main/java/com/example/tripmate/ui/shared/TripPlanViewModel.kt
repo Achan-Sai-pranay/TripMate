@@ -498,6 +498,13 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         resolveMissingCoordinates()
     }
 
+    fun addItemToDay(dayIndex: Int, item: ItineraryItem) {
+        val plan = _tripPlan.value ?: return
+        val targetIndex = dayIndex.coerceIn(0, plan.days.lastIndex)
+        val currentItems = plan.days[targetIndex].items
+        updateDay(targetIndex, currentItems + item)
+    }
+
     fun updateBudget(newBudget: Int) {
         val plan = _tripPlan.value ?: return
         val updatedPlan = plan.copy(budget = newBudget)

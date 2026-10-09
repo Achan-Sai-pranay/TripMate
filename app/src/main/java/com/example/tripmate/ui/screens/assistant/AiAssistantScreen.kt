@@ -47,6 +47,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.FlightTakeoff
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
@@ -54,10 +56,21 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import com.example.tripmate.model.ActionablePlace
+import com.example.tripmate.model.AssistantContext
+import com.example.tripmate.model.ItineraryItem
+import com.example.tripmate.model.TripPlan
+import com.example.tripmate.ui.shared.TripPlanViewModel
+import com.example.tripmate.util.ActivityIconMapper
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
@@ -121,13 +134,19 @@ fun AiAssistantScreen(
     onMyTripsClick: () -> Unit,
     onProfileClick: () -> Unit,
     modifier: Modifier = Modifier,
+    initialTripId: String = "",
     initialDestination: String = "",
+    tripPlanViewModel: TripPlanViewModel? = null,
     viewModel: AssistantViewModel = viewModel()
 ) {
     var inputText by remember { mutableStateOf("") }
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val activeMapRoute by viewModel.activeMapRoute.collectAsState()
+    val currentContext by viewModel.currentContext.collectAsState()
+    val availableTrips by viewModel.availableTrips.collectAsState()
+    val dynamicSuggestions by viewModel.dynamicSuggestions.collectAsState()
+
     var attachedImage by remember { mutableStateOf<Bitmap?>(null) }
     var showQuickOptionsSheet by remember { mutableStateOf(false) }
 
@@ -146,10 +165,8 @@ fun AiAssistantScreen(
         if (isChatDragged && mapExpanded) mapExpanded = false
     }
 
-    LaunchedEffect(initialDestination) {
-        if (initialDestination.isNotBlank()) {
-            viewModel.setInitialDestination(initialDestination)
-        }
+    LaunchedEffect(initialTripId, initialDestination) {
+        viewModel.loadAvailableTrips(initialTripId, initialDestination)
     }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -257,6 +274,13 @@ fun AiAssistantScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            // Context Selector Bar: Switch between Global Concierge and Specific Trips
+            AssistantContextBar(
+                currentContext = currentContext,
+                availableTrips = availableTrips,
+                onSelectContext = { viewModel.selectContext(it) }
+            )
+
             // Upper Area: Chat messages list (taking top space)
             Box(
                 modifier = Modifier
@@ -272,6 +296,8 @@ fun AiAssistantScreen(
                     if (messages.isEmpty()) {
                         item {
                             EmptyStateWelcome(
+                                currentContext = currentContext,
+                                suggestions = dynamicSuggestions,
                                 onOrbClick = ::startVoiceInput,
                                 onPromptClick = { prompt -> viewModel.sendMessage(prompt) }
                             )
@@ -284,7 +310,26 @@ fun AiAssistantScreen(
                                     focusPinTitle = spot
                                     focusRequestId++
                                     mapExpanded = true
-                                } else null
+                                } else null,
+                                onAddPlaceToTrip = { place ->
+                                    val targetDayIndex = (place.dayNumber - 1).coerceAtLeast(0)
+                                    val newItem = ItineraryItem(
+                                        id = java.util.UUID.randomUUID().toString(),
+                                        time = place.time,
+                                        title = place.placeName,
+                                        durationLabel = place.durationLabel,
+                                        costLabel = place.costLabel,
+                                        costAmount = place.costAmount,
+                                        category = place.category,
+                                        whyThis = place.whyThis,
+                                        icon = ActivityIconMapper.iconFor(place.placeName),
+                                        placeName = place.placeName
+                                    )
+                                    tripPlanViewModel?.addItemToDay(targetDayIndex, newItem)
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar("Added \"${place.placeName}\" to Day ${place.dayNumber} itinerary!")
+                                    }
+                                }
                             )
                         }
 
@@ -447,12 +492,7 @@ fun AiAssistantScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    val quickPrompts = listOf(
-                        "3 day itinerary to Goa",
-                        "Alternate places for day 3 in Goa",
-                        "Best sunset beach shacks in North Goa",
-                        "Historic churches & Latin quarter walk in Goa"
-                    )
+                    val quickPrompts = dynamicSuggestions.map { it.first }
 
                     quickPrompts.forEach { prompt ->
                         Row(
@@ -565,6 +605,8 @@ private fun AssistantTopBar(
  */
 @Composable
 private fun EmptyStateWelcome(
+    currentContext: AssistantContext,
+    suggestions: List<Pair<String, String>>,
     onOrbClick: () -> Unit,
     onPromptClick: (String) -> Unit
 ) {
@@ -575,6 +617,16 @@ private fun EmptyStateWelcome(
         animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
         label = "scale"
     )
+
+    val (welcomeTitle, welcomeSubtitle) = when (currentContext) {
+        is AssistantContext.Trip -> {
+            val plan = currentContext.tripPlan
+            "Trip Concierge: ${plan.destination}" to "${plan.dateRangeLabel} • ${plan.days.size} Days • ₹${plan.budget} budget"
+        }
+        is AssistantContext.Global -> {
+            "TripMate AI Travel Guide" to "Plan trips, alternate stops, and discover places worldwide"
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -604,7 +656,7 @@ private fun EmptyStateWelcome(
         }
 
         Text(
-            text = "Tap to speak, or type below",
+            text = welcomeTitle,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -612,23 +664,17 @@ private fun EmptyStateWelcome(
         )
 
         Text(
-            text = "Plan trips, alternate stops, and discover places on real maps",
+            text = welcomeSubtitle,
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
             modifier = Modifier.padding(bottom = Dimens.lg)
         )
 
-        // Suggestion chips matching competitor style
+        // Suggestion chips matching context
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            val suggestions = listOf(
-                "3 day itinerary to Goa" to "North Goa beaches, forts & Old Goa churches",
-                "Alternate places for day 3 in Goa" to "Jardín Botánico, Local Art District & hidden spots",
-                "Best sunset cafe spots in North Goa" to "Thalassa, Curlies & beachside dining"
-            )
-
             suggestions.forEach { (title, subtitle) ->
                 Card(
                     onClick = { onPromptClick(title) },
@@ -684,7 +730,11 @@ private fun EmptyStateWelcome(
  * Assistant message on left with "Searched the web", bot avatar, and structured cards.
  */
 @Composable
-private fun CompetitorChatBubble(message: ChatMessage, onSpotClick: ((String) -> Unit)? = null) {
+private fun CompetitorChatBubble(
+    message: ChatMessage,
+    onSpotClick: ((String) -> Unit)? = null,
+    onAddPlaceToTrip: ((ActionablePlace) -> Unit)? = null
+) {
     if (message.isFromUser) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -705,6 +755,11 @@ private fun CompetitorChatBubble(message: ChatMessage, onSpotClick: ((String) ->
             }
         }
     } else {
+        val actionablePlace = remember(message.text) { parseActionablePlace(message.text) }
+        val cleanText = remember(message.text) {
+            message.text.replace(Regex("""\[\[\s*ADD_PLACE\s*:\s*(.*?)\s*\]\]""", RegexOption.IGNORE_CASE), "").trimEnd()
+        }
+
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -758,7 +813,14 @@ private fun CompetitorChatBubble(message: ChatMessage, onSpotClick: ((String) ->
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    CompetitorStructuredMessage(rawText = message.text, onSpotClick = onSpotClick)
+                    CompetitorStructuredMessage(rawText = cleanText, onSpotClick = onSpotClick)
+
+                    if (actionablePlace != null) {
+                        ActionablePlaceCard(
+                            place = actionablePlace,
+                            onAddClick = { onAddPlaceToTrip?.invoke(actionablePlace) }
+                        )
+                    }
                 }
             }
         }
@@ -1099,3 +1161,236 @@ private fun AttachedImagePreview(bitmap: Bitmap, onRemove: () -> Unit) {
         }
     }
 }
+
+@Composable
+private fun ActionablePlaceCard(
+    place: ActionablePlace,
+    onAddClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = PrimaryOrange.copy(alpha = 0.08f)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, PrimaryOrange.copy(alpha = 0.35f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = PrimaryOrange.copy(alpha = 0.18f)
+                ) {
+                    Text(
+                        text = "Day ${place.dayNumber} Suggestion",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryOrange,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+                Text(
+                    text = "${place.time} • ${place.costLabel}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF64748B),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = place.placeName,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A)
+            )
+            if (place.whyThis.isNotBlank()) {
+                Text(
+                    text = place.whyThis,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF475569),
+                    modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+                )
+            }
+            Button(
+                onClick = onAddClick,
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryOrange),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Add to Day ${place.dayNumber} Itinerary",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AssistantContextBar(
+    currentContext: AssistantContext,
+    availableTrips: List<TripPlan>,
+    onSelectContext: (AssistantContext) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.marginMobile, vertical = 6.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true }
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (currentContext is AssistantContext.Trip) PrimaryOrange.copy(alpha = 0.15f)
+                            else Color(0xFF2563EB).copy(alpha = 0.12f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (currentContext is AssistantContext.Trip) Icons.Filled.FlightTakeoff else Icons.Filled.Public,
+                        contentDescription = null,
+                        tint = if (currentContext is AssistantContext.Trip) PrimaryOrange else Color(0xFF2563EB),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = when (currentContext) {
+                                is AssistantContext.Trip -> currentContext.tripPlan.destination
+                                is AssistantContext.Global -> "Global Travel Guide"
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = when (currentContext) {
+                                    is AssistantContext.Trip -> "${currentContext.tripPlan.days.size}D"
+                                    is AssistantContext.Global -> "All Travel"
+                                },
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                color = TextSecondary,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = when (currentContext) {
+                            is AssistantContext.Trip -> "${currentContext.tripPlan.dateRangeLabel} • Tap to switch"
+                            is AssistantContext.Global -> "Worldwide advice • Tap to choose a trip"
+                        },
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = "Switch Context",
+                tint = TextSecondary,
+                modifier = Modifier.size(20.dp)
+            )
+
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier
+                    .widthIn(min = 280.dp)
+                    .background(Color.White)
+            ) {
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(
+                                text = "🌐 Global Travel Guide",
+                                fontWeight = if (currentContext is AssistantContext.Global) FontWeight.Bold else FontWeight.Normal,
+                                color = if (currentContext is AssistantContext.Global) PrimaryOrange else TextPrimary
+                            )
+                            Text(
+                                text = "General advice, packing tips, worldwide destinations",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = TextSecondary
+                            )
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelectContext(AssistantContext.Global)
+                    }
+                )
+
+                if (availableTrips.isNotEmpty()) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Text(
+                        text = "YOUR PLANNED TRIPS",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                        color = TextSecondary,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                    availableTrips.forEach { trip ->
+                        val isSelected = currentContext is AssistantContext.Trip && currentContext.tripPlan.id == trip.id
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        text = "✈️ ${trip.destination}",
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) PrimaryOrange else TextPrimary
+                                    )
+                                    Text(
+                                        text = "${trip.dateRangeLabel} • ${trip.days.size} days • ${trip.travelerCount} traveler(s)",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = TextSecondary
+                                    )
+                                }
+                            },
+                            onClick = {
+                                expanded = false
+                                onSelectContext(AssistantContext.Trip(trip))
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+

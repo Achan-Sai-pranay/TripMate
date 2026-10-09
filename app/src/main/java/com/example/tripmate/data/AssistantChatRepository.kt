@@ -13,10 +13,13 @@ private val Context.chatDataStore by preferencesDataStore(name = "assistant_chat
 
 class AssistantChatRepository(private val context: Context) {
 
-    private val chatKey = stringPreferencesKey("chat_messages_history")
+    private val legacyKey = stringPreferencesKey("chat_messages_history")
+    private fun sessionKey(sessionId: String) = stringPreferencesKey("chat_messages_${sessionId.trim().ifBlank { "global" }}")
 
-    suspend fun loadMessages(): List<ChatMessage> {
-        val raw = context.chatDataStore.data.first()[chatKey] ?: return emptyList()
+    suspend fun loadMessages(sessionId: String = "global"): List<ChatMessage> {
+        val targetKey = sessionKey(sessionId)
+        val prefs = context.chatDataStore.data.first()
+        val raw = prefs[targetKey] ?: if (sessionId == "global") prefs[legacyKey] else null ?: return emptyList()
         return try {
             val array = JSONArray(raw)
             (0 until array.length()).map { i ->
@@ -31,7 +34,8 @@ class AssistantChatRepository(private val context: Context) {
         }
     }
 
-    suspend fun saveMessages(messages: List<ChatMessage>) {
+    suspend fun saveMessages(messages: List<ChatMessage>, sessionId: String = "global") {
+        val targetKey = sessionKey(sessionId)
         context.chatDataStore.edit { prefs ->
             val array = JSONArray()
             // Keep the last 50 messages to avoid unbounded store growth
@@ -43,13 +47,17 @@ class AssistantChatRepository(private val context: Context) {
                     }
                 )
             }
-            prefs[chatKey] = array.toString()
+            prefs[targetKey] = array.toString()
         }
     }
 
-    suspend fun clearMessages() {
+    suspend fun clearMessages(sessionId: String = "global") {
+        val targetKey = sessionKey(sessionId)
         context.chatDataStore.edit { prefs ->
-            prefs.remove(chatKey)
+            prefs.remove(targetKey)
+            if (sessionId == "global") {
+                prefs.remove(legacyKey)
+            }
         }
     }
 }
