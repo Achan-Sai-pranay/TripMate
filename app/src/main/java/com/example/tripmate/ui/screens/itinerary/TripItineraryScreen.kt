@@ -293,6 +293,15 @@ fun TripItineraryScreen(
                                     dateLabel = currentDay.dateLabel,
                                     onPreviousDay = { if (currentDayIndex > 0) currentDayIndex-- },
                                     onNextDay = { if (currentDayIndex < plan.days.lastIndex) currentDayIndex++ },
+                                    onOptimizeRoute = {
+                                        val changed = tripPlanViewModel.optimizeDayRoute(currentDayIndex)
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                if (changed) "Route optimized for minimum travel distance! Fixed items & meals anchored."
+                                                else "Route is already optimal."
+                                            )
+                                        }
+                                    },
                                     modifier = Modifier.padding(vertical = Dimens.xs)
                                 )
                             }

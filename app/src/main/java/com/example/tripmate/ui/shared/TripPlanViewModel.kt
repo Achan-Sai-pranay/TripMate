@@ -522,6 +522,56 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
         updateDay(targetIndex, currentItems + item)
     }
 
+    fun optimizeDayRoute(dayIndex: Int): Boolean {
+        val plan = _tripPlan.value ?: return false
+        val day = plan.days.getOrNull(dayIndex) ?: return false
+        val optimizedItems = com.example.tripmate.util.RouteOptimizationHelper.optimizeDay(day.items)
+        if (optimizedItems == day.items) return false
+        updateDay(dayIndex, optimizedItems)
+        return true
+    }
+
+    fun moveItemUp(dayIndex: Int, itemIndex: Int) {
+        val plan = _tripPlan.value ?: return
+        val day = plan.days.getOrNull(dayIndex) ?: return
+        if (itemIndex <= 0 || itemIndex > day.items.lastIndex) return
+        val newItems = day.items.toMutableList()
+        val item = newItems.removeAt(itemIndex)
+        newItems.add(itemIndex - 1, item)
+        updateDay(dayIndex, newItems)
+    }
+
+    fun moveItemDown(dayIndex: Int, itemIndex: Int) {
+        val plan = _tripPlan.value ?: return
+        val day = plan.days.getOrNull(dayIndex) ?: return
+        if (itemIndex < 0 || itemIndex >= day.items.lastIndex) return
+        val newItems = day.items.toMutableList()
+        val item = newItems.removeAt(itemIndex)
+        newItems.add(itemIndex + 1, item)
+        updateDay(dayIndex, newItems)
+    }
+
+    fun moveItemToDay(fromDayIndex: Int, itemIndex: Int, toDayIndex: Int) {
+        val plan = _tripPlan.value ?: return
+        val fromDay = plan.days.getOrNull(fromDayIndex) ?: return
+        val toDay = plan.days.getOrNull(toDayIndex) ?: return
+        if (fromDayIndex == toDayIndex) return
+        if (itemIndex !in fromDay.items.indices) return
+
+        val itemToMove = fromDay.items[itemIndex]
+        val fromItems = fromDay.items.toMutableList().also { it.removeAt(itemIndex) }
+        val toItems = toDay.items + itemToMove
+
+        val updatedDays = plan.days.toMutableList().also {
+            it[fromDayIndex] = fromDay.copy(items = fromItems)
+            it[toDayIndex] = toDay.copy(items = toItems)
+        }
+        val updatedPlan = plan.copy(days = updatedDays)
+        _tripPlan.value = updatedPlan
+        viewModelScope.launch { persistPlan(updatedPlan) }
+        resolveMissingCoordinates()
+    }
+
     fun updateBudget(newBudget: Int) {
         val plan = _tripPlan.value ?: return
         val updatedPlan = plan.copy(budget = newBudget)

@@ -281,14 +281,15 @@ fun DaySelector(
     dateLabel: String,
     onPreviousDay: () -> Unit,
     onNextDay: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOptimizeRoute: (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.Bottom) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "Day $dayNumber",
                 style = MaterialTheme.typography.titleMedium,
@@ -301,7 +302,39 @@ fun DaySelector(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.xs)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Dimens.xs),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onOptimizeRoute != null) {
+                Surface(
+                    shape = RoundedCornerShape(Dimens.radiusFull),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Dimens.radiusFull))
+                        .clickable { onOptimizeRoute() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoAwesome,
+                            contentDescription = "Optimize Route",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "Optimize",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
             DayNavButton(icon = Icons.Filled.ChevronLeft, onClick = onPreviousDay)
             DayNavButton(icon = Icons.Filled.ChevronRight, onClick = onNextDay)
         }
