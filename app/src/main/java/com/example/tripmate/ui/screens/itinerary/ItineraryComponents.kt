@@ -55,6 +55,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -266,6 +269,7 @@ private fun tabIcon(tab: ItineraryTab) = when (tab) {
     ItineraryTab.STAYS -> Icons.Filled.Hotel
     ItineraryTab.DINING -> Icons.Filled.Restaurant
     ItineraryTab.BUDGET -> Icons.Filled.Payments
+    ItineraryTab.DOCUMENTS -> Icons.Filled.ConfirmationNumber
 }
 
 @Composable
@@ -331,7 +335,10 @@ fun TimelineItemRow(
     onClick: (() -> Unit)? = null,
     destination: String = "",
     nextItem: ItineraryItem? = null,
-    onVoteClick: ((Boolean) -> Unit)? = null
+    onVoteClick: ((Boolean) -> Unit)? = null,
+    attachedDocuments: List<com.example.tripmate.model.TripDocument> = emptyList(),
+    onViewDocumentClick: ((com.example.tripmate.model.TripDocument) -> Unit)? = null,
+    onAttachDocumentClick: (() -> Unit)? = null
 ) {
     // Destination-specific photo: the item's stored image, else a cached/looked-up photo of THIS place.
     // Generic activities (breakfast, free time, check-in...) have no place and keep the plain card.
@@ -542,6 +549,11 @@ fun TimelineItemRow(
                                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                                     if (!item.isFixed) {
                                         DropdownMenuItem(
+                                            text = { Text("Attach Reservation / Pass") },
+                                            leadingIcon = { Icon(Icons.Filled.ConfirmationNumber, contentDescription = null) },
+                                            onClick = { menuExpanded = false; onAttachDocumentClick?.invoke() }
+                                        )
+                                        DropdownMenuItem(
                                             text = { Text("Duplicate") },
                                             leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
                                             onClick = { menuExpanded = false; onDuplicateClick() }
@@ -552,6 +564,11 @@ fun TimelineItemRow(
                                             onClick = { menuExpanded = false; onDeleteClick() }
                                         )
                                     } else {
+                                        DropdownMenuItem(
+                                            text = { Text("Attach Reservation / Pass") },
+                                            leadingIcon = { Icon(Icons.Filled.ConfirmationNumber, contentDescription = null) },
+                                            onClick = { menuExpanded = false; onAttachDocumentClick?.invoke() }
+                                        )
                                         DropdownMenuItem(
                                             text = { Text("This is a fixed commitment", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                                             onClick = { menuExpanded = false },
@@ -603,6 +620,64 @@ fun TimelineItemRow(
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 4.dp)
                                 )
+                            }
+                        }
+                    }
+
+                    if (attachedDocuments.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = Dimens.xs),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            attachedDocuments.forEach { doc ->
+                                Surface(
+                                    shape = RoundedCornerShape(Dimens.radiusSm),
+                                    color = Color.Black.copy(alpha = 0.55f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.6f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable(enabled = onViewDocumentClick != null) {
+                                            onViewDocumentClick?.invoke(doc)
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.ConfirmationNumber,
+                                            contentDescription = null,
+                                            tint = Color(0xFF34D399),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            text = buildString {
+                                                if (!doc.confirmationNumber.isNullOrBlank()) {
+                                                    append("CONF# ${doc.confirmationNumber} • ")
+                                                }
+                                                append(doc.title)
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        if (doc.fileUri != null) {
+                                            Spacer(Modifier.width(4.dp))
+                                            Icon(
+                                                imageVector = if (doc.fileType == com.example.tripmate.model.DocumentFileType.PDF) Icons.Filled.PictureAsPdf else Icons.Filled.Image,
+                                                contentDescription = null,
+                                                tint = Color.White.copy(alpha = 0.8f),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

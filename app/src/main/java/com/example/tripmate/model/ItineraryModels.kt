@@ -106,5 +106,6 @@ enum class ItineraryTab(val label: String) {
     MAP("Map"),
     STAYS("Stays"),
     DINING("Dining"),
-    BUDGET("Budget")
+    BUDGET("Budget"),
+    DOCUMENTS("Documents")
 }

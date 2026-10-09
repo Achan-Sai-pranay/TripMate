@@ -36,5 +36,6 @@ data class TripPlan(
     val supabaseTripId: String? = null, // links to the `trips` table row for expense tracking and multi-user collaboration
     val isShared: Boolean = false,
     val membersCount: Int = 1,
-    val customExpenses: List<BudgetEntry> = emptyList()
+    val customExpenses: List<BudgetEntry> = emptyList(),
+    val documents: List<TripDocument> = emptyList()
 )

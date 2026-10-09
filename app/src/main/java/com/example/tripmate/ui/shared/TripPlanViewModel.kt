@@ -18,6 +18,7 @@ import com.example.tripmate.model.PlaceDetails
 import com.example.tripmate.model.TravelLeg
 import com.example.tripmate.model.TravelerOption
 import com.example.tripmate.model.TripConstraints
+import com.example.tripmate.model.TripDocument
 import com.example.tripmate.model.TripPlan
 import com.example.tripmate.model.TripPlanRequest
 import com.example.tripmate.model.TripPreferences
@@ -579,6 +580,36 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                     syncExpensesFromCloud()
                 } catch (_: Exception) { }
             }
+        }
+    }
+
+    fun addDocument(document: TripDocument) {
+        val plan = _tripPlan.value ?: return
+        val updatedDocs = plan.documents + document
+        val updatedPlan = plan.copy(documents = updatedDocs)
+        _tripPlan.value = updatedPlan
+        viewModelScope.launch { persistPlan(updatedPlan) }
+    }
+
+    fun updateDocument(document: TripDocument) {
+        val plan = _tripPlan.value ?: return
+        val updatedDocs = plan.documents.map { if (it.id == document.id) document else it }
+        val updatedPlan = plan.copy(documents = updatedDocs)
+        _tripPlan.value = updatedPlan
+        viewModelScope.launch { persistPlan(updatedPlan) }
+    }
+
+    fun deleteDocument(documentId: String) {
+        val plan = _tripPlan.value ?: return
+        val toDelete = plan.documents.firstOrNull { it.id == documentId }
+        val updatedDocs = plan.documents.filterNot { it.id == documentId }
+        val updatedPlan = plan.copy(documents = updatedDocs)
+        _tripPlan.value = updatedPlan
+        viewModelScope.launch {
+            toDelete?.fileUri?.let { uri ->
+                com.example.tripmate.util.TripDocumentFileManager.deleteStoredFile(uri)
+            }
+            persistPlan(updatedPlan)
         }
     }
 

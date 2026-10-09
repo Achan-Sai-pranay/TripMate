@@ -97,10 +97,13 @@ fun TripItineraryScreen(
     val tripMembers by tripPlanViewModel.tripMembers.collectAsState()
     var showInviteSheet by remember { mutableStateOf(false) }
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     var selectedViewTab by remember { mutableStateOf(ItineraryTab.ITINERARY) }
     var currentDayIndex by remember { mutableStateOf(0) }
     var editingItem by remember { mutableStateOf<Pair<Int, ItineraryItem>?>(null) }
+    var previewDocFromTimeline by remember { mutableStateOf<com.example.tripmate.model.TripDocument?>(null) }
+    var attachDocForItem by remember { mutableStateOf<Pair<Int, ItineraryItem>?>(null) }
     // Shared by the itinerary list and the map: the currently highlighted place (pin key)
     var selectedPinKey by remember { mutableStateOf<String?>(null) }
     var focusToken by remember { mutableStateOf(0) }
@@ -301,6 +304,22 @@ fun TripItineraryScreen(
                                         tripPlanViewModel.castVote(currentDayIndex, item.id, if (isUpvote) "UP" else "DOWN")
                                     },
                                     onEditClick = { editingItem = index to item },
+                                    attachedDocuments = plan.documents.filter { it.linkedItemId == item.id },
+                                    onViewDocumentClick = { doc ->
+                                        if (doc.fileType == com.example.tripmate.model.DocumentFileType.PDF && doc.fileUri != null) {
+                                            val res = com.example.tripmate.util.TripDocumentFileManager.openPdfFile(context, doc.fileUri)
+                                            if (res.isFailure) {
+                                                coroutineScope.launch {
+                                                    snackbarHostState.showSnackbar("Could not open PDF: ${res.exceptionOrNull()?.localizedMessage ?: "No viewer found"}")
+                                                }
+                                            }
+                                        } else if (doc.fileType == com.example.tripmate.model.DocumentFileType.IMAGE) {
+                                            previewDocFromTimeline = doc
+                                        } else {
+                                            selectedViewTab = ItineraryTab.DOCUMENTS
+                                        }
+                                    },
+                                    onAttachDocumentClick = { attachDocForItem = currentDayIndex to item },
                                     onReplaceClick = {
                                         aiViewModel.replaceItem(
                                             destination = plan.destination,
@@ -382,6 +401,32 @@ fun TripItineraryScreen(
                                 )
                             }
                         }
+                        ItineraryTab.DOCUMENTS -> {
+                            item {
+                                DocumentsReservationsSectionView(
+                                    plan = plan,
+                                    onAddDocument = { doc ->
+                                        tripPlanViewModel.addDocument(doc)
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Saved reservation: \"${doc.title}\"")
+                                        }
+                                    },
+                                    onUpdateDocument = { doc ->
+                                        tripPlanViewModel.updateDocument(doc)
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Updated \"${doc.title}\"")
+                                        }
+                                    },
+                                    onDeleteDocument = { id ->
+                                        tripPlanViewModel.deleteDocument(id)
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar("Deleted reservation")
+                                        }
+                                    },
+                                    modifier = Modifier.padding(top = Dimens.sm)
+                                )
+                            }
+                        }
                     }
                 }
                 
@@ -394,6 +439,33 @@ fun TripItineraryScreen(
                             tripPlanViewModel.updateDay(currentDayIndex, newItems)
                             editingItem = null
                         }
+                    )
+                }
+
+                attachDocForItem?.let { (dayIdx, item) ->
+                    AddEditDocumentDialog(
+                        plan = plan,
+                        existingDocument = com.example.tripmate.model.TripDocument(
+                            title = "",
+                            dayIndex = dayIdx,
+                            linkedItemId = item.id,
+                            linkedItemTitle = item.title
+                        ),
+                        onDismiss = { attachDocForItem = null },
+                        onSave = { newDoc ->
+                            tripPlanViewModel.addDocument(newDoc)
+                            attachDocForItem = null
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar("Attached reservation to \"${item.title}\"")
+                            }
+                        }
+                    )
+                }
+
+                previewDocFromTimeline?.let { doc ->
+                    DocumentImagePreviewDialog(
+                        doc = doc,
+                        onDismiss = { previewDocFromTimeline = null }
                     )
                 }
 
