@@ -34,6 +34,8 @@ object TripPlanJson {
                     put("isFixed", item.isFixed)
                     item.placeName?.let { put("placeName", it) }
                     item.wikipediaTitle?.let { put("wikipediaTitle", it) }
+                    item.timeBlock?.let { put("timeBlock", it) }
+                    item.notes?.let { put("notes", it) }
                     put("votes", JSONObject().apply {
                         put("upvotes", item.votes.upvotes)
                         put("downvotes", item.votes.downvotes)
@@ -105,6 +107,36 @@ object TripPlanJson {
             })
         }
 
+        val wishlistArray = JSONArray()
+        plan.wishlistPlaces.forEach { place ->
+            val placeObj = JSONObject().apply {
+                put("id", place.id)
+                put("time", place.time)
+                put("title", place.title)
+                put("durationLabel", place.durationLabel)
+                put("costLabel", place.costLabel)
+                put("costAmount", place.costAmount)
+                put("category", place.category.name)
+                put("whyThis", place.whyThis)
+                put("imageUrl", place.imageUrl ?: JSONObject.NULL)
+                put("isFixed", place.isFixed)
+                place.placeName?.let { put("placeName", it) }
+                place.wikipediaTitle?.let { put("wikipediaTitle", it) }
+                place.timeBlock?.let { put("timeBlock", it) }
+                place.notes?.let { put("notes", it) }
+            }
+            place.placeDetails?.let { p ->
+                placeObj.put("placeDetails", JSONObject().apply {
+                    put("rating", p.rating)
+                    put("reviewCount", p.reviewCount)
+                    put("openingHours", p.openingHours)
+                    p.latitude?.let { put("latitude", it) }
+                    p.longitude?.let { put("longitude", it) }
+                })
+            }
+            wishlistArray.put(placeObj)
+        }
+
         return JSONObject().apply {
             put("id", plan.id)
             put("userId", plan.userId ?: JSONObject.NULL)
@@ -120,6 +152,7 @@ object TripPlanJson {
             put("isShared", plan.isShared)
             put("membersCount", plan.membersCount)
             put("customExpenses", customExpensesArray)
+            put("wishlistPlaces", wishlistArray)
         }
     }
 
@@ -187,7 +220,9 @@ object TripPlanJson {
                     travelToNext = travelLeg,
                     placeName = if (itemObj.has("placeName")) itemObj.optString("placeName").takeIf { it.isNotBlank() && it != "null" } else null,
                     wikipediaTitle = itemObj.optString("wikipediaTitle").takeIf { it.isNotBlank() && it != "null" },
-                    votes = itemVotes
+                    votes = itemVotes,
+                    timeBlock = itemObj.optString("timeBlock").takeIf { it.isNotBlank() && it != "null" },
+                    notes = itemObj.optString("notes").takeIf { it.isNotBlank() && it != "null" }
                 )
             }
             ItineraryDay(
@@ -239,6 +274,59 @@ object TripPlanJson {
             }
         } ?: emptyList()
 
+        val wishlistPlaces = root.optJSONArray("wishlistPlaces")?.let { wArray ->
+            (0 until wArray.length()).map { idx ->
+                val itemObj = wArray.getJSONObject(idx)
+                val itemId = itemObj.optString("id", java.util.UUID.randomUUID().toString())
+                val title = itemObj.getString("title")
+                val costLabel = itemObj.optString("costLabel", "₹0")
+                val placeDetails = itemObj.optJSONObject("placeDetails")?.let { p ->
+                    PlaceDetails(
+                        rating = p.optDouble("rating", 4.5),
+                        reviewCount = p.optInt("reviewCount", 1200),
+                        openingHours = p.optString("openingHours", "9:00 AM - 6:00 PM"),
+                        latitude = if (p.has("latitude")) p.getDouble("latitude") else null,
+                        longitude = if (p.has("longitude")) p.getDouble("longitude") else null
+                    )
+                }
+                val travelLeg = itemObj.optJSONObject("travelToNext")?.let { t ->
+                    TravelLeg(
+                        distanceLabel = t.optString("distanceLabel", "2.0 km"),
+                        durationLabel = t.optString("durationLabel", "10 mins"),
+                        transportMode = t.optString("transportMode", "Drive")
+                    )
+                }
+                val parsedCostAmount = if (itemObj.has("costAmount")) {
+                    itemObj.getInt("costAmount")
+                } else {
+                    CostParser.parseRupees(costLabel, travelerCount = travelerCount)
+                }
+                val parsedCategory = itemObj.optString("category").takeIf { it.isNotBlank() }?.let { catStr ->
+                    runCatching { ExpenseCategory.valueOf(catStr) }.getOrNull()
+                } ?: ActivityIconMapper.categoryFor(title)
+
+                ItineraryItem(
+                    id = itemId,
+                    time = itemObj.optString("time", "Flexible"),
+                    title = title,
+                    durationLabel = itemObj.optString("durationLabel", "1h"),
+                    costLabel = costLabel,
+                    costAmount = parsedCostAmount,
+                    category = parsedCategory,
+                    whyThis = itemObj.optString("whyThis", ""),
+                    icon = ActivityIconMapper.iconFor(title),
+                    imageUrl = itemObj.optString("imageUrl").takeIf { it.isNotBlank() && it != "null" },
+                    isFixed = itemObj.optBoolean("isFixed", false),
+                    placeDetails = placeDetails,
+                    travelToNext = travelLeg,
+                    placeName = if (itemObj.has("placeName")) itemObj.optString("placeName").takeIf { it.isNotBlank() && it != "null" } else null,
+                    wikipediaTitle = itemObj.optString("wikipediaTitle").takeIf { it.isNotBlank() && it != "null" },
+                    timeBlock = itemObj.optString("timeBlock").takeIf { it.isNotBlank() && it != "null" },
+                    notes = itemObj.optString("notes").takeIf { it.isNotBlank() && it != "null" }
+                )
+            }
+        } ?: emptyList()
+
         return TripPlan(
             id = root.optString("id", java.util.UUID.randomUUID().toString()),
             userId = root.optString("userId").takeIf { it.isNotBlank() && it != "null" },
@@ -253,7 +341,8 @@ object TripPlanJson {
             supabaseTripId = root.optString("supabaseTripId").takeIf { it.isNotBlank() && it != "null" },
             isShared = root.optBoolean("isShared", false),
             membersCount = root.optInt("membersCount", 1),
-            customExpenses = customExpenses
+            customExpenses = customExpenses,
+            wishlistPlaces = wishlistPlaces
         )
     }
 }

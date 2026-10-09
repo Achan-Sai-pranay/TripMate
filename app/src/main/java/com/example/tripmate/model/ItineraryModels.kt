@@ -95,7 +95,15 @@ data class ItineraryItem(
     /**
      * Collaborative group voting data for this activity.
      */
-    val votes: ActivityVote = ActivityVote()
+    val votes: ActivityVote = ActivityVote(),
+    /**
+     * Time-of-day block: "Morning", "Afternoon", "Evening", "Night".
+     */
+    val timeBlock: String? = null,
+    /**
+     * Custom notes, reservation details, or traveler pro-tips.
+     */
+    val notes: String? = null
 ) {
     val geocodeQuery: String? get() = (placeName?.takeIf { it.isNotBlank() } ?: title).trim().takeIf { it.isNotBlank() }
     val hasCoordinates: Boolean get() = placeDetails?.latitude != null && placeDetails.longitude != null
