@@ -34,6 +34,13 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.Brightness5
+import androidx.compose.material.icons.filled.WbTwilight
+import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material.icons.filled.Lightbulb
+import com.example.tripmate.ui.components.dayColorFor
+import com.example.tripmate.model.TimeBlock
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -318,6 +325,58 @@ private fun DayNavButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 }
 
 @Composable
+fun TimeBlockHeader(
+    block: TimeBlock,
+    modifier: Modifier = Modifier
+) {
+    val (icon, color) = when (block) {
+        TimeBlock.MORNING -> Pair(Icons.Filled.WbSunny, Color(0xFFF59E0B))
+        TimeBlock.AFTERNOON -> Pair(Icons.Filled.Brightness5, Color(0xFFEA580C))
+        TimeBlock.EVENING -> Pair(Icons.Filled.WbTwilight, Color(0xFF8B5CF6))
+        TimeBlock.NIGHT -> Pair(Icons.Filled.NightsStay, Color(0xFF3B82F6))
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = RoundedCornerShape(Dimens.radiusFull),
+            color = color.copy(alpha = 0.15f),
+            border = BorderStroke(1.dp, color.copy(alpha = 0.35f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = block.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+        )
+    }
+}
+
+@Composable
 fun TimelineItemRow(
     item: ItineraryItem,
     isLastItem: Boolean,
@@ -331,7 +390,9 @@ fun TimelineItemRow(
     onClick: (() -> Unit)? = null,
     destination: String = "",
     nextItem: ItineraryItem? = null,
-    onVoteClick: ((Boolean) -> Unit)? = null
+    onVoteClick: ((Boolean) -> Unit)? = null,
+    order: Int? = null,
+    dayNumber: Int = 1
 ) {
     // Destination-specific photo: the item's stored image, else a cached/looked-up photo of THIS place.
     // Generic activities (breakfast, free time, check-in...) have no place and keep the plain card.
@@ -362,20 +423,43 @@ fun TimelineItemRow(
                 .width(48.dp)
                 .fillMaxHeight()
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                    .border(2.dp, MaterialTheme.colorScheme.surfaceVariant, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(22.dp)
-                )
+            if (order != null) {
+                val pinColor = dayColorFor(dayNumber)
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) MaterialTheme.colorScheme.primary else pinColor)
+                        .border(
+                            width = if (isSelected) 3.dp else 2.dp,
+                            color = if (isSelected) Color.White else Color.White.copy(alpha = 0.95f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$order",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+                        .border(2.dp, MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
             if (!isLastItem) {
                 Box(
@@ -634,6 +718,32 @@ fun TimelineItemRow(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.White.copy(alpha = 0.88f),
                                 modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+
+                    if (!item.notes.isNullOrBlank()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = Dimens.xs)
+                                .clip(RoundedCornerShape(Dimens.radiusMd))
+                                .background(Color(0xFF0F172A).copy(alpha = 0.65f))
+                                .border(1.dp, Color(0xFFFFD54F).copy(alpha = 0.35f), RoundedCornerShape(Dimens.radiusMd))
+                                .padding(Dimens.sm),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Lightbulb,
+                                contentDescription = null,
+                                tint = Color(0xFFFFD54F),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = item.notes,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.92f)
                             )
                         }
                     }

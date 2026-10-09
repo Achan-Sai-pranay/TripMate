@@ -245,6 +245,9 @@ fun TripMateNavGraph(
                 onMyTripsClick = {
                     navController.navigateToTab(Screen.MyTrips.route)
                 },
+                onAskAiAboutTrip = { tripId ->
+                    navController.navigate(Screen.AiAssistant.buildRoute(tripId))
+                },
                 onOpenExpenses = { tripId ->
                     navController.navigate(Screen.ExpenseTracker.buildRoute(tripId))
                 }

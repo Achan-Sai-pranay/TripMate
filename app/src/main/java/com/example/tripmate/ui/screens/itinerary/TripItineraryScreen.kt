@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import com.example.tripmate.data.WikipediaImageService
@@ -78,6 +79,7 @@ fun TripItineraryScreen(
     onOpenExpenses: (tripId: String) -> Unit,
     modifier: Modifier = Modifier,
     onMyTripsClick: () -> Unit = {},
+    onAskAiAboutTrip: (tripId: String) -> Unit = {},
     aiViewModel: ItineraryAiViewModel = viewModel()
 ) {
     val tripPlan by tripPlanViewModel.tripPlan.collectAsState()
@@ -204,7 +206,7 @@ fun TripItineraryScreen(
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Start,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             androidx.compose.material3.TextButton(
@@ -222,6 +224,28 @@ fun TripItineraryScreen(
                                     text = "All Trips",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            androidx.compose.material3.FilledTonalButton(
+                                onClick = { onAskAiAboutTrip(plan.id) },
+                                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(Dimens.radiusFull)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Ask AI",
+                                    style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -289,8 +313,21 @@ fun TripItineraryScreen(
                                 val isReplacing = (item.time + item.title) == replacingItemKey
                                 val pinKey = currentDay.pinKey(index)
                                 val targetItemId = item.id
+                                val order = currentDay.placeOrder(index)
+
+                                val prevBlock = if (index > 0) currentDay.items[index - 1].resolvedTimeBlock else null
+                                val currentBlock = item.resolvedTimeBlock
+                                if (index == 0 || prevBlock != currentBlock) {
+                                    TimeBlockHeader(
+                                        block = currentBlock,
+                                        modifier = Modifier.padding(top = if (index == 0) Dimens.xs else Dimens.sm, bottom = Dimens.xs)
+                                    )
+                                }
+
                                 TimelineItemRow(
                                     item = item,
+                                    order = order,
+                                    dayNumber = currentDay.dayNumber,
                                     nextItem = currentDay.items.getOrNull(index + 1),
                                     destination = plan.destination,
                                     isSelected = pinKey != null && pinKey == selectedPinKey,
