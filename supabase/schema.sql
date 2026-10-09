@@ -60,6 +60,12 @@ CREATE TABLE IF NOT EXISTS public.expenses (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Multi-currency support (Splitwise standard):
+-- Stores original foreign transaction currency, amount, and exchange rate for international expenses.
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS original_amount DOUBLE PRECISION;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS original_currency TEXT;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS exchange_rate DOUBLE PRECISION;
+
 -- 5. Create Expense Splits table
 CREATE TABLE IF NOT EXISTS public.expense_splits (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
