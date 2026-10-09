@@ -2,6 +2,7 @@ package com.example.tripmate.ui.screens.itinerary
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -89,6 +90,7 @@ fun TripCollaborationCard(
     members: List<ProfileRow>,
     onInviteClick: () -> Unit,
     onManageExpensesClick: () -> Unit,
+    onVoteActivitiesClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val memberCount = (members.size).coerceAtLeast(if (plan.isShared) plan.membersCount else 1)
@@ -112,7 +114,7 @@ fun TripCollaborationCard(
                 .padding(Dimens.md),
             verticalArrangement = Arrangement.spacedBy(Dimens.sm)
         ) {
-            // Header Row: Avatars & Invite Button
+            // Header: Top Row (Avatars + Title + Invite Button) and Subtitle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -121,32 +123,21 @@ fun TripCollaborationCard(
                 Row(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(end = Dimens.sm),
+                        .padding(end = Dimens.xs),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
                 ) {
                     // Overlapping Avatar Stack
                     MemberAvatarStack(members = members)
 
-                    Column(modifier = Modifier.weight(1f, fill = false)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = if (isMultiUser) "Group Trip (${memberCount} Travelers)" else "Solo Trip",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Text(
-                            text = if (isMultiUser) "Voting & Split Expenses Active" else "Invite friends to collaborate & vote",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Text(
+                        text = if (isMultiUser) "Group (${memberCount} Travelers)" else "Solo Trip",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 // Invite Companions Button (Protected width and single line)
@@ -157,7 +148,7 @@ fun TripCollaborationCard(
                         containerColor = PrimaryOrange,
                         contentColor = Color.White
                     ),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.PersonAdd,
@@ -173,6 +164,14 @@ fun TripCollaborationCard(
                     )
                 }
             }
+
+            Text(
+                text = if (isMultiUser) "Voting & Split Expenses Active" else "Invite friends to collaborate & vote",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
             // Action Pills Row
             Row(
@@ -205,33 +204,32 @@ fun TripCollaborationCard(
                     )
                 }
 
-                // Group Voting Pill / Indicator
-                Surface(
+                // Group Voting Button / Action Pill
+                OutlinedButton(
+                    onClick = { onVoteActivitiesClick?.invoke() },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(Dimens.radiusMd),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.HowToVote,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = "Vote on Activities",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Filled.HowToVote,
+                        contentDescription = "Vote on Activities",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Vote Activities",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }

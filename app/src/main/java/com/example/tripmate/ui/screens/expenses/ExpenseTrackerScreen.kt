@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,7 +40,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import com.example.tripmate.model.ExpenseCategory
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -337,11 +341,13 @@ fun ExpenseTrackerScreen(
                                         }
                                     }
 
-                                    expense.category?.let {
+                                    expense.category?.let { cat ->
+                                        val displayLabel = runCatching { ExpenseCategory.valueOf(cat).label }.getOrDefault(cat)
                                         Text(
-                                            it,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            displayLabel,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.primary
                                         )
                                     }
 
@@ -424,12 +430,12 @@ fun ExpenseTrackerScreen(
                 onSelectCurrency = { viewModel.selectCurrency(it) },
                 onRefreshRates = { viewModel.fetchRates() },
                 onDismiss = { showAddExpense = false },
-                onConfirm = { desc, amount, curr, customRate, notes ->
+                onConfirm = { desc, amount, category, curr, customRate, notes ->
                     viewModel.addExpense(
                         tripId = tripId,
                         description = desc,
                         amount = amount,
-                        category = null,
+                        category = category,
                         currencyCode = curr.code,
                         customRate = customRate,
                         userNotes = notes
@@ -441,8 +447,8 @@ fun ExpenseTrackerScreen(
             DomesticAddExpenseDialog(
                 membersCount = members.size,
                 onDismiss = { showAddExpense = false },
-                onConfirm = { desc, amount ->
-                    viewModel.addExpense(tripId, desc, amount, category = null)
+                onConfirm = { desc, amount, category ->
+                    viewModel.addExpense(tripId, desc, amount, category = category)
                     showAddExpense = false
                 }
             )
@@ -534,10 +540,11 @@ fun ExpenseTrackerScreen(
 private fun DomesticAddExpenseDialog(
     membersCount: Int,
     onDismiss: () -> Unit,
-    onConfirm: (description: String, amount: Double) -> Unit
+    onConfirm: (description: String, amount: Double, category: String) -> Unit
 ) {
     var description by remember { mutableStateOf("") }
     var amount      by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf(ExpenseCategory.FOOD) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -558,6 +565,21 @@ private fun DomesticAddExpenseDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Text("Category", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.xs)
+                ) {
+                    ExpenseCategory.entries.forEach { cat ->
+                        FilterChip(
+                            selected = selectedCategory == cat,
+                            onClick = { selectedCategory = cat },
+                            label = { Text(cat.label, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
+
                 Text(
                     "Split equally among all $membersCount member(s).",
                     style = MaterialTheme.typography.bodySmall,
@@ -569,7 +591,7 @@ private fun DomesticAddExpenseDialog(
             TextButton(onClick = {
                 val amountValue = amount.toDoubleOrNull()
                 if (description.isNotBlank() && amountValue != null && amountValue > 0) {
-                    onConfirm(description.trim(), amountValue)
+                    onConfirm(description.trim(), amountValue, selectedCategory.name)
                 }
             }) { Text("Add", color = MaterialTheme.colorScheme.primary) }
         },
@@ -599,6 +621,7 @@ private fun InternationalAddExpenseDialog(
     onConfirm: (
         description: String,
         amount: Double,
+        category: String,
         currency: CurrencyInfo,
         customRate: Double?,
         notes: String?
@@ -606,6 +629,7 @@ private fun InternationalAddExpenseDialog(
 ) {
     var description by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf(ExpenseCategory.FOOD) }
     var showCurrencyDropdown by remember { mutableStateOf(false) }
     var showCustomRateField by remember { mutableStateOf(false) }
     var customRateInput by remember { mutableStateOf("") }
@@ -649,6 +673,20 @@ private fun InternationalAddExpenseDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Text("Category", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.xs)
+                ) {
+                    ExpenseCategory.entries.forEach { cat ->
+                        FilterChip(
+                            selected = selectedCategory == cat,
+                            onClick = { selectedCategory = cat },
+                            label = { Text(cat.label, style = MaterialTheme.typography.labelSmall) }
+                        )
+                    }
+                }
 
                 // Currency selector
                 Text(
@@ -853,6 +891,7 @@ private fun InternationalAddExpenseDialog(
                     onConfirm(
                         description.trim(),
                         amountValue,
+                        selectedCategory.name,
                         selectedCurrency,
                         customRateValue,
                         notesInput.takeIf { it.isNotBlank() }

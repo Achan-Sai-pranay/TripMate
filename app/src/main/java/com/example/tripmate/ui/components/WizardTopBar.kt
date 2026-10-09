@@ -27,7 +27,7 @@ fun WizardTopBar(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = Dimens.marginMobile, vertical = Dimens.xs)
+            .padding(horizontal = Dimens.marginMobile, vertical = Dimens.sm)
     ) {
         IconButton(
             onClick = onBackClick,

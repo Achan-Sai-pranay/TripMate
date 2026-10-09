@@ -16,9 +16,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.os.Build
+import com.example.tripmate.util.TripNotificationHelper
+import com.example.tripmate.data.AuthRepository
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,9 +54,30 @@ fun AccountSettingsScreen(
     val pushNotifications by userPrefs.pushNotificationsFlow.collectAsState(initial = true)
     val emailNotifications by userPrefs.emailNotificationsFlow.collectAsState(initial = false)
     val isDarkMode = darkModePref == "DARK"
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        coroutineScope.launch {
+            userPrefs.setPushNotifications(isGranted)
+            if (isGranted) {
+                TripNotificationHelper.initChannels(context)
+                TripNotificationHelper.postNotification(
+                    context,
+                    title = "TripMate Alerts Active 🎉",
+                    message = "You'll now receive timely updates for trip schedules, votes, and expenses."
+                )
+                snackbarHostState.showSnackbar("Push notifications enabled")
+            } else {
+                snackbarHostState.showSnackbar("Notification permission was denied")
+            }
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Account Settings") },
@@ -87,7 +117,39 @@ fun AccountSettingsScreen(
                     checked = pushNotifications,
                     onCheckedChange = { enabled ->
                         coroutineScope.launch {
-                            userPrefs.setPushNotifications(enabled)
+                            if (enabled) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    val isGranted = ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.POST_NOTIFICATIONS
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    if (isGranted) {
+                                        userPrefs.setPushNotifications(true)
+                                        TripNotificationHelper.initChannels(context)
+                                        TripNotificationHelper.postNotification(
+                                            context,
+                                            title = "TripMate Alerts Active 🎉",
+                                            message = "You'll now receive timely updates for trip schedules, votes, and expenses."
+                                        )
+                                        snackbarHostState.showSnackbar("Push notifications enabled")
+                                    } else {
+                                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                } else {
+                                    userPrefs.setPushNotifications(true)
+                                    TripNotificationHelper.initChannels(context)
+                                    TripNotificationHelper.postNotification(
+                                        context,
+                                        title = "TripMate Alerts Active 🎉",
+                                        message = "You'll now receive timely updates for trip schedules, votes, and expenses."
+                                    )
+                                    snackbarHostState.showSnackbar("Push notifications enabled")
+                                }
+                            } else {
+                                userPrefs.setPushNotifications(false)
+                                TripNotificationHelper.cancelAll(context)
+                                snackbarHostState.showSnackbar("Push notifications turned off")
+                            }
                         }
                     }
                 )
@@ -98,6 +160,11 @@ fun AccountSettingsScreen(
                     onCheckedChange = { enabled ->
                         coroutineScope.launch {
                             userPrefs.setEmailNotifications(enabled)
+                            val userEmail = AuthRepository().currentUserEmail() ?: "your registered email"
+                            snackbarHostState.showSnackbar(
+                                if (enabled) "Email updates enabled. Updates will be sent to $userEmail."
+                                else "Email updates paused."
+                            )
                         }
                     }
                 )

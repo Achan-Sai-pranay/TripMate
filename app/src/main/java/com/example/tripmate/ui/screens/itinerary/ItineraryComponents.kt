@@ -91,6 +91,7 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
@@ -386,7 +387,7 @@ fun DaySelector(
                             )
                             Spacer(Modifier.width(5.dp))
                             Text(
-                                text = "+ Add Activity",
+                                text = "Add Activity",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.secondary
@@ -783,10 +784,11 @@ fun TimelineItemRow(
                         modifier = Modifier.padding(top = Dimens.xs)
                     )
 
-                    Row(
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    androidx.compose.foundation.layout.FlowRow(
                         modifier = Modifier.padding(top = Dimens.xs, bottom = Dimens.sm),
-                        horizontalArrangement = Arrangement.spacedBy(Dimens.sm),
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.xs),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         InfoChip(icon = Icons.Filled.Schedule, label = item.durationLabel, isDark = true)
                         InfoChip(icon = Icons.Filled.Payments, label = item.costLabel, isDark = true)
@@ -800,6 +802,8 @@ fun TimelineItemRow(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color(0xFF34D399),
                                     fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 4.dp)
                                 )
                             }
@@ -813,6 +817,8 @@ fun TimelineItemRow(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color(0xFFF87171),
                                     fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = Dimens.sm, vertical = 4.dp)
                                 )
                             }
@@ -2353,9 +2359,10 @@ fun StaysSectionView(
                     val context = androidx.compose.ui.platform.LocalContext.current
                     androidx.compose.material3.OutlinedButton(
                         onClick = {
-                            val query = android.net.Uri.encode("${stay.name}, ${stay.location}")
-                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:0,0?q=$query"))
-                            runCatching { context.startActivity(intent) }
+                            com.example.tripmate.util.MapIntentHelper.launchMap(
+                                context = context,
+                                query = "${stay.name}, ${stay.location}"
+                            )
                         },
                         modifier = Modifier.fillMaxWidth().padding(top = Dimens.sm),
                         contentPadding = PaddingValues(vertical = 4.dp)
@@ -2484,6 +2491,44 @@ fun DiningSectionView(
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.primary
                             )
+                        }
+                    }
+
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = Dimens.sm),
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.sm)
+                    ) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                com.example.tripmate.util.MapIntentHelper.launchMap(
+                                    context = context,
+                                    query = "${place.name}, ${place.cuisine}"
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("View on Map", style = MaterialTheme.typography.labelMedium)
+                        }
+
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                com.example.tripmate.util.MapIntentHelper.launchSearchOrReservation(
+                                    context = context,
+                                    query = "${place.name} restaurant reservations menu"
+                                )
+                            },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Menu & Reserve", style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }

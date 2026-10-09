@@ -2,13 +2,13 @@ package com.example.tripmate.util
 
 object Features {
     /**
-     * Parked for later: auto-tracking stops during trip creation.
-     * When disabled, the trip creation wizard goes directly from Step 3 (Constraints) to Itinerary.
+     * Auto-tracking stops during trip creation and on-the-go travel with GPS listener.
      */
-    const val TRIP_TRACKING = false
+    const val TRIP_TRACKING = true
 
     /**
-     * Total steps in the Create Trip wizard (Basics 1/3, Preferences 2/3, Constraints 3/3).
+     * Total steps in the Create Trip wizard (Basics 1/4, Preferences 2/4, Constraints 3/4, Tracking 4/4).
      */
-    const val TOTAL_WIZARD_STEPS = 3
+    const val TOTAL_WIZARD_STEPS = 4
 }
+

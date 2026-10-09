@@ -8,17 +8,35 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.LocalActivity
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -33,8 +51,6 @@ import com.example.tripmate.ui.components.TripMateBottomNav
 import com.example.tripmate.ui.shared.TripPlanViewModel
 import com.example.tripmate.ui.theme.Dimens
 
-private const val USER_AVATAR_URL =
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuCuNVTDMRg1r_UHptkk5G2653Tt632Ge0hBDx5WfDCK77d4H7xRbPsUBdcExMjyaKT6ymf202U63-1FrpoubqPWWKttheWHIUqdvzKHMV9dCaNSgDxDCp_ZLq_KXrCDpkhiIiFaquLfX51ozRhE4SCDpzlisKaKE7Pkat9ezhwAzykRq89Fma3YQ_GHDT9_3x37Fbcwalnzea6NZ6rbXGH5VC3NTLtV_ao4MwxGI-XkHUUfXcxX60ryWA"
 
 @Composable
 fun HomeScreen(
@@ -73,8 +89,24 @@ fun HomeScreen(
         }
     }
 
+    val authRepo = remember { com.example.tripmate.data.AuthRepository() }
+    val profileRepo = remember { com.example.tripmate.data.ProfileRepository() }
+    val currentUserId = remember { authRepo.currentUserId() }
     val currentUserName = remember {
-        com.example.tripmate.data.AuthRepository().currentUserName() ?: "Traveler"
+        authRepo.currentUserName() ?: "Traveler"
+    }
+    var userAvatarUrl by remember {
+        mutableStateOf(com.example.tripmate.data.ProfileRepository.getCachedAvatarUrl() ?: authRepo.currentUserAvatarUrl().orEmpty())
+    }
+
+    LaunchedEffect(currentUserId) {
+        if (!currentUserId.isNullOrBlank()) {
+            val profile = profileRepo.fetchProfile(currentUserId)
+            val fetchedAvatar = profile?.avatarUrl
+            if (!fetchedAvatar.isNullOrBlank()) {
+                userAvatarUrl = fetchedAvatar
+            }
+        }
     }
 
     Scaffold(
@@ -100,7 +132,7 @@ fun HomeScreen(
             contentPadding = PaddingValues(
                 start = Dimens.marginMobile,
                 end = Dimens.marginMobile,
-                top = innerPadding.calculateTopPadding() + Dimens.md,
+                top = innerPadding.calculateTopPadding() + WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + Dimens.xs,
                 bottom = innerPadding.calculateBottomPadding() + Dimens.lg
             ),
             verticalArrangement = Arrangement.spacedBy(Dimens.xl)
@@ -108,22 +140,140 @@ fun HomeScreen(
             item {
                 HomeHeader(
                     userName = currentUserName,
-                    userAvatarUrl = "",
+                    userAvatarUrl = userAvatarUrl,
                     onAvatarClick = onProfileClick
                 )
             }
 
             item {
-                Column {
-                    com.example.tripmate.ui.components.SmartDestinationSearchField(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        onDestinationSelected = { dest ->
-                            searchQuery = "${dest.name}, ${dest.country}"
-                            onSearchDestination(searchQuery)
-                        },
-                        placeholder = "Where to? (e.g. Goa, Paris, Manali)"
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(Dimens.xs)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.xs)
+                    ) {
+                        com.example.tripmate.ui.components.SmartDestinationSearchField(
+                            query = searchQuery,
+                            onQueryChange = { searchQuery = it },
+                            onDestinationSelected = { dest ->
+                                searchQuery = "${dest.name}, ${dest.country}"
+                                onSearchDestination(searchQuery)
+                            },
+                            placeholder = "Where to? (e.g. Goa, Paris, Manali)",
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Surface(
+                            onClick = { showFilterSheet = true },
+                            modifier = Modifier.size(54.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.Tune,
+                                    contentDescription = "Filter trip duration",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Quick duration filter chips row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            onClick = { showFilterSheet = true },
+                            shape = RoundedCornerShape(Dimens.radiusFull),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Tune,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(13.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "Trip Length",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        }
+
+                        Surface(
+                            onClick = {
+                                val now = System.currentTimeMillis()
+                                onQuickTripLength(now, now + 2 * 24 * 60 * 60 * 1000L)
+                            },
+                            shape = RoundedCornerShape(Dimens.radiusFull),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                        ) {
+                            Text(
+                                text = "Weekend",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+
+                        Surface(
+                            onClick = {
+                                val now = System.currentTimeMillis()
+                                onQuickTripLength(now, now + 6 * 24 * 60 * 60 * 1000L)
+                            },
+                            shape = RoundedCornerShape(Dimens.radiusFull),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                        ) {
+                            Text(
+                                text = "1 Week",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+
+                        Surface(
+                            onClick = {
+                                val now = System.currentTimeMillis()
+                                onQuickTripLength(now, now + 13 * 24 * 60 * 60 * 1000L)
+                            },
+                            shape = RoundedCornerShape(Dimens.radiusFull),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                        ) {
+                            Text(
+                                text = "2 Weeks",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
                 }
             }
 

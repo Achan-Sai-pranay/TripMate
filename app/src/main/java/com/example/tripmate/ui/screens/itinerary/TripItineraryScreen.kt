@@ -1,5 +1,13 @@
 package com.example.tripmate.ui.screens.itinerary
 
+import com.example.tripmate.ui.screens.home.GroupVotingSheet
+import com.example.tripmate.util.TripLocationTracker
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.draw.clip
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +22,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -97,7 +109,11 @@ fun TripItineraryScreen(
     LaunchedEffect(aiError) { aiError?.let { snackbarHostState.showSnackbar(it); aiViewModel.dismissError() } }
 
     val tripMembers by tripPlanViewModel.tripMembers.collectAsState()
+    val isGpsTracking by TripLocationTracker.isTracking.collectAsState()
+    val trackedStops by TripLocationTracker.trackedStops.collectAsState()
+    val totalDistance by TripLocationTracker.totalDistanceMeters.collectAsState()
     var showInviteSheet by remember { mutableStateOf(false) }
+    var showVotingSheet by remember { mutableStateOf(false) }
     val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -128,6 +144,66 @@ fun TripItineraryScreen(
                     }
                 }
             )
+        },
+        topBar = {
+            val plan = tripPlan
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.background,
+                tonalElevation = 2.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = Dimens.marginMobile, vertical = Dimens.xs),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.material3.TextButton(
+                        onClick = onMyTripsClick,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to All Trips",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "All Trips",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (plan != null) {
+                        androidx.compose.material3.FilledTonalButton(
+                            onClick = { onAskAiAboutTrip(plan.id) },
+                            colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(Dimens.radiusFull)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Ask AI",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
         },
         floatingActionButton = {
             val plan = tripPlan
@@ -209,54 +285,6 @@ fun TripItineraryScreen(
                     verticalArrangement = Arrangement.spacedBy(Dimens.lg)
                 ) {
                     item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            androidx.compose.material3.TextButton(
-                                onClick = onMyTripsClick,
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Back to All Trips",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = "All Trips",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            androidx.compose.material3.FilledTonalButton(
-                                onClick = { onAskAiAboutTrip(plan.id) },
-                                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                ),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                shape = RoundedCornerShape(Dimens.radiusFull)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.AutoAwesome,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    text = "Ask AI",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                    item {
                         TripSummaryCard(
                             trip = TripSummary(
                                 destination = plan.destination,
@@ -265,6 +293,61 @@ fun TripItineraryScreen(
                             ),
                             heroImages = heroImages
                         )
+                    }
+                    if (isGpsTracking) {
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(Dimens.radiusMd),
+                                color = Color(0xFFECFDF5),
+                                border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(10.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFF10B981))
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = "GPS Trip Tracking Active",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF065F46)
+                                            )
+                                            val km = totalDistance / 1000f
+                                            Text(
+                                                text = "${trackedStops.size} stops auto-detected • ${String.format(java.util.Locale.US, "%.1f", km)} km traveled",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF047857)
+                                            )
+                                        }
+                                    }
+
+                                    TextButton(
+                                        onClick = { TripLocationTracker.stopTracking() },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                                    ) {
+                                        Text(
+                                            text = "Stop",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFDC2626)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                     // Trip collaboration & companions section: Member avatars, invite link & group expenses
                     item {
@@ -281,6 +364,9 @@ fun TripItineraryScreen(
                                         snackbarHostState.showSnackbar("Please sign in to manage group expenses.")
                                     }
                                 }
+                            },
+                            onVoteActivitiesClick = {
+                                showVotingSheet = true
                             }
                         )
                     }
@@ -559,6 +645,23 @@ fun TripItineraryScreen(
                         tripPlanViewModel = tripPlanViewModel,
                         destination = plan.destination,
                         onDismiss = { showInviteSheet = false }
+                    )
+                }
+
+                if (showVotingSheet) {
+                    GroupVotingSheet(
+                        tripPlan = plan,
+                        onDismiss = { showVotingSheet = false },
+                        onVote = { dayIdx, itemId, isUp ->
+                            tripPlanViewModel.castVote(dayIdx, itemId, if (isUp) "UP" else "DOWN")
+                        },
+                        onPlanNewTrip = {
+                            showVotingSheet = false
+                            onPlanNewTripClick()
+                        },
+                        onViewItinerary = {
+                            showVotingSheet = false
+                        }
                     )
                 }
             }

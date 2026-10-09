@@ -20,6 +20,9 @@ class AuthRepository {
     fun currentUserName(): String? =
         auth.currentUserOrNull()?.userMetadata?.get("full_name")?.toString()?.trim('"')
             ?: auth.currentUserOrNull()?.userMetadata?.get("name")?.toString()?.trim('"')
+    fun currentUserAvatarUrl(): String? =
+        auth.currentUserOrNull()?.userMetadata?.get("avatar_url")?.toString()?.trim('"')
+            ?: auth.currentUserOrNull()?.userMetadata?.get("picture")?.toString()?.trim('"')
 
     suspend fun signInWithGoogle() {
         auth.signInWith(Google)

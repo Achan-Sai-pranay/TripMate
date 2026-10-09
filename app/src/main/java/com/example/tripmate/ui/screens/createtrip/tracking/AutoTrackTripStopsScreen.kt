@@ -47,8 +47,15 @@ import com.example.tripmate.ui.components.StepProgressBar
 import com.example.tripmate.ui.theme.Dimens
 import com.example.tripmate.ui.theme.PrimaryOrange
 import com.example.tripmate.ui.theme.TextMuted
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import com.example.tripmate.ui.theme.TextPrimary
 import com.example.tripmate.ui.theme.TextSecondary
+import com.example.tripmate.util.TripLocationTracker
 
 @Composable
 fun AutoTrackTripStopsScreen(
@@ -57,6 +64,18 @@ fun AutoTrackTripStopsScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        if (fineGranted || coarseGranted) {
+            TripLocationTracker.startTracking(context)
+        }
+        onEnableTracking()
+    }
+
     // Beautiful subtle sunset peach gradient background matching Screenshot 2
     val backgroundGradient = Brush.verticalGradient(
         colors = listOf(
@@ -85,7 +104,7 @@ fun AutoTrackTripStopsScreen(
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 StepProgressBar(
-                    currentStep = 3,
+                    currentStep = 4,
                     totalSteps = 4,
                     modifier = Modifier.padding(end = Dimens.md)
                 )
@@ -99,7 +118,28 @@ fun AutoTrackTripStopsScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Button(
-                    onClick = onEnableTracking,
+                    onClick = {
+                        val hasFine = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED
+                        val hasCoarse = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        ) == PackageManager.PERMISSION_GRANTED
+
+                        if (hasFine || hasCoarse) {
+                            TripLocationTracker.startTracking(context)
+                            onEnableTracking()
+                        } else {
+                            permissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp),
@@ -118,7 +158,12 @@ fun AutoTrackTripStopsScreen(
 
                 Spacer(modifier = Modifier.height(Dimens.sm))
 
-                TextButton(onClick = onMaybeLater) {
+                TextButton(
+                    onClick = {
+                        TripLocationTracker.stopTracking()
+                        onMaybeLater()
+                    }
+                ) {
                     Text(
                         text = "Maybe later",
                         style = MaterialTheme.typography.bodyMedium,

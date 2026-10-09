@@ -27,6 +27,9 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     private val _email = MutableStateFlow("")
     val email: StateFlow<String> = _email.asStateFlow()
 
+    private val _avatarUrl = MutableStateFlow<String?>(null)
+    val avatarUrl: StateFlow<String?> = _avatarUrl.asStateFlow()
+
     private val _isGuest = MutableStateFlow(false)
     val isGuest: StateFlow<Boolean> = _isGuest.asStateFlow()
 
@@ -48,11 +51,13 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             if (isGuestMode) {
                 _displayName.value = "Guest Traveler"
                 _email.value = "guest@tripmate.local"
+                _avatarUrl.value = null
             } else {
                 if (userId != null) {
                     val profile = profileRepository.fetchProfile(userId)
                     _displayName.value = profile?.fullName ?: authRepository.currentUserName() ?: "Traveler"
                     _email.value = profile?.email ?: authRepository.currentUserEmail().orEmpty()
+                    _avatarUrl.value = profile?.avatarUrl ?: authRepository.currentUserAvatarUrl()
                 }
             }
 

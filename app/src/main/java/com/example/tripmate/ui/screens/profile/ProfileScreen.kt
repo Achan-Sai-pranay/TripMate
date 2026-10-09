@@ -1,6 +1,8 @@
 package com.example.tripmate.ui.screens.profile
 
 import android.widget.Toast
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import com.example.tripmate.ui.theme.PrimaryOrange
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -84,9 +86,11 @@ fun ProfileScreen(
 ) {
     val displayName by viewModel.displayName.collectAsState()
     val email by viewModel.email.collectAsState()
+    val avatarUrl by viewModel.avatarUrl.collectAsState()
     val tripHistory by viewModel.tripHistory.collectAsState()
     var showEditNameDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showNotificationSheet by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -117,7 +121,7 @@ fun ProfileScreen(
         topBar = {
             ProfileTopBar(
                 onNotificationsClick = {
-                    coroutineScope.launch { snackbarHostState.showSnackbar("You're all caught up — no new notifications") }
+                    showNotificationSheet = true
                 }
             )
         },
@@ -140,7 +144,7 @@ fun ProfileScreen(
             contentPadding = PaddingValues(
                 start = Dimens.marginMobile,
                 end = Dimens.marginMobile,
-                top = Dimens.lg,
+                top = innerPadding.calculateTopPadding() + Dimens.md,
                 bottom = innerPadding.calculateBottomPadding() + Dimens.lg
             ),
             verticalArrangement = Arrangement.spacedBy(Dimens.lg)
@@ -149,6 +153,7 @@ fun ProfileScreen(
                 ProfileHero(
                     displayName = displayName,
                     email = email,
+                    avatarUrl = avatarUrl,
                     onEditNameClick = { showEditNameDialog = true }
                 )
             }
@@ -185,15 +190,24 @@ fun ProfileScreen(
                         Text(
                             text = "My Travel Groups & Shared Trips",
                             style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.weight(1f).padding(end = Dimens.sm)
                         )
                         if (sharedTrips.isNotEmpty()) {
-                            Text(
-                                text = "${sharedTrips.size} active",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(Dimens.radiusFull),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Text(
+                                    text = "${sharedTrips.size} active",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
                         }
                     }
 
@@ -560,42 +574,94 @@ fun ProfileScreen(
             }
         )
     }
+
+    if (showNotificationSheet) {
+        com.example.tripmate.ui.components.notifications.NotificationCenterSheet(
+            onDismiss = { showNotificationSheet = false },
+            onNavigateToTrip = {
+                showNotificationSheet = false
+                onMyTripsClick()
+            }
+        )
+    }
 }
 
 @Composable
 private fun ProfileTopBar(onNotificationsClick: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(horizontal = Dimens.marginMobile, vertical = Dimens.xs),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+    val notifications by com.example.tripmate.data.NotificationRepository.notifications.collectAsState()
+    val unreadCount = notifications.count { !it.isRead }
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.background,
+        tonalElevation = 1.dp
     ) {
-        Text(
-            text = "TripMate",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-        IconButton(onClick = onNotificationsClick) {
-            Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = Dimens.marginMobile, vertical = Dimens.xs),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "TripMate",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            IconButton(onClick = onNotificationsClick) {
+                Box {
+                    Icon(
+                        Icons.Filled.Notifications,
+                        contentDescription = "Notifications",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (unreadCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .align(Alignment.TopEnd)
+                                .clip(CircleShape)
+                                .background(com.example.tripmate.ui.theme.PrimaryOrange)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun ProfileHero(displayName: String, email: String, onEditNameClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun ProfileHero(
+    displayName: String,
+    email: String,
+    avatarUrl: String? = null,
+    onEditNameClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(96.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .border(2.dp, MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
+        if (!avatarUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = "Profile avatar",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .border(2.dp, MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = Dimens.md)) {
             Text(text = displayName, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
@@ -624,17 +690,26 @@ private fun TravelStatsRow(stats: List<TravelStat>, modifier: Modifier = Modifie
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceContainerHighest)
             ) {
-                Column(modifier = Modifier.padding(Dimens.md), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp, vertical = Dimens.sm),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
                         text = stat.value,
                         style = MaterialTheme.typography.titleLarge,
-                        color = if (stat.isTertiary) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                        color = if (stat.isTertiary) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                        maxLines = 1
                     )
                     Text(
                         text = stat.label,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
@@ -651,16 +726,24 @@ private fun SavedTripCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.width(180.dp).height(140.dp),
+        modifier = modifier.width(200.dp).height(140.dp),
         shape = RoundedCornerShape(Dimens.radiusMd),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(Dimens.md), verticalArrangement = Arrangement.Bottom) {
-            Text(text = trip.destination, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(
+                text = trip.destination,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             Text(
                 text = "${trip.days.size} Days \u2022 ${trip.travelerCount} Traveler${if (trip.travelerCount == 1) "" else "s"}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp)
             )
         }

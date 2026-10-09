@@ -33,6 +33,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -210,76 +211,104 @@ fun MyTripsScreen(
                 )
             }
 
-            if (trips.isEmpty() && !isLoading) {
-                // Empty state
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(Dimens.xl),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(Dimens.md)
+            when {
+                isLoading && trips.isEmpty() -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(Dimens.xl),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(72.dp)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(Dimens.md)
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Filled.FlightTakeoff,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(36.dp)
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = "No trips created yet",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Text(
-                            text = "Your AI-generated trips, collaborative group itineraries, and offline plans will appear here.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = Dimens.lg)
-                        )
-
-                        Button(
-                            onClick = onPlanNewTripClick,
-                            shape = RoundedCornerShape(Dimens.radiusFull),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                            modifier = Modifier.padding(top = Dimens.sm)
-                        ) {
-                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Plan Your First Trip")
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Text(
+                                text = "Loading your trips...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = Dimens.marginMobile,
-                        end = Dimens.marginMobile,
-                        top = Dimens.sm,
-                        bottom = Dimens.xl
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(Dimens.md)
-                ) {
-                    items(filteredTrips, key = { it.id }) { trip ->
-                        TripCardItem(
-                            trip = trip,
-                            onClick = { onTripClick(trip) },
-                            onDelete = { tripToDelete = trip }
-                        )
+                filteredTrips.isEmpty() -> {
+                    // Empty state (handles both no trips created yet and no search results found)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(Dimens.xl),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(Dimens.md)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(72.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = if (searchQuery.isNotBlank()) Icons.Filled.Search else Icons.Filled.FlightTakeoff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "No matching trips found" else "No trips created yet",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                text = if (searchQuery.isNotBlank()) "Try searching for a different destination or tag." else "Your AI-generated trips, collaborative group itineraries, and offline plans will appear here.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = Dimens.lg)
+                            )
+
+                            if (searchQuery.isBlank()) {
+                                Button(
+                                    onClick = onPlanNewTripClick,
+                                    shape = RoundedCornerShape(Dimens.radiusFull),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier.padding(top = Dimens.sm)
+                                ) {
+                                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Plan Your First Trip")
+                                }
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = Dimens.marginMobile,
+                            end = Dimens.marginMobile,
+                            top = Dimens.sm,
+                            bottom = Dimens.xl
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(Dimens.md)
+                    ) {
+                        items(filteredTrips, key = { it.id }) { trip ->
+                            TripCardItem(
+                                trip = trip,
+                                onClick = { onTripClick(trip) },
+                                onDelete = { tripToDelete = trip }
+                            )
+                        }
                     }
                 }
             }
@@ -454,10 +483,16 @@ private fun TripCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .padding(end = Dimens.sm),
                     horizontalArrangement = Arrangement.spacedBy(Dimens.md),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f, fill = false),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Icon(
                             Icons.Filled.CalendarMonth,
                             contentDescription = null,
@@ -468,7 +503,9 @@ private fun TripCardItem(
                         Text(
                             text = "${trip.days.size} Days (${trip.dateRangeLabel})",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 

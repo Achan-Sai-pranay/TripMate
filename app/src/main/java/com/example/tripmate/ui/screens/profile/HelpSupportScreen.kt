@@ -62,9 +62,30 @@ fun HelpSupportScreen(
             val context = androidx.compose.ui.platform.LocalContext.current
             Column(verticalArrangement = Arrangement.spacedBy(Dimens.md)) {
                 Text("Frequently Asked Questions", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                FaqItem(question = "How does TripMate generate itineraries?", answer = "We use advanced AI models to analyze your destination, budget, and preferences to build a custom schedule.")
-                FaqItem(question = "Can I change my budget?", answer = "Yes! You can edit your budget in the 'Plan a Trip' flow, or directly on the Budget tab of your itinerary.")
-                FaqItem(question = "Is my data private?", answer = "All trip data is currently stored locally on your device.")
+                FaqItem(
+                    question = "How does TripMate generate itineraries?",
+                    answer = "We use advanced AI models to analyze your destination, budget, and travel vibes to craft an optimized, personalized day-by-day itinerary."
+                )
+                FaqItem(
+                    question = "Can I change my budget?",
+                    answer = "Yes! You can adjust your budget during the 'Plan a Trip' flow, or directly fine-tune it in the Expense Tracker tab of your itinerary."
+                )
+                FaqItem(
+                    question = "Where is my trip data stored?",
+                    answer = "Your trips, expenses, and itinerary items are securely synchronized to your cloud account via Supabase for multi-device access and live group collaboration, while cached locally on your device for offline travel viewing."
+                )
+                FaqItem(
+                    question = "Is my data private and secure?",
+                    answer = "Yes. TripMate uses encrypted Supabase cloud storage with strict row-level security policies. Only you and companions you explicitly invite can view or contribute to your trips."
+                )
+                FaqItem(
+                    question = "How does group collaboration work?",
+                    answer = "You can invite friends using unique 6-character trip codes. Once joined, everyone can add expenses, split bills, vote on activities, and view live itinerary changes."
+                )
+                FaqItem(
+                    question = "Can I access my itineraries offline?",
+                    answer = "Yes! Your planned itineraries, activity details, and saved stops remain cached on your device so you can access your schedule even without mobile data or Wi-Fi."
+                )
             }
             
             Column(verticalArrangement = Arrangement.spacedBy(Dimens.md), horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {

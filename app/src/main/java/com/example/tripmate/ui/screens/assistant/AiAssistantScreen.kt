@@ -124,8 +124,6 @@ import com.example.tripmate.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-private const val ASSISTANT_USER_AVATAR_URL =
-    "https://lh3.googleusercontent.com/aida-public/AB6AXuBqy6luG88wyBEaehc3k7YMnIHoQ2HZcdnrH5s-xz5cUz_ntiGlPNThuRFjWDw7DcngWwryr2rvj1IiKzWUtGN3bVs4y9t_4FgNe6RhvyfmivKLLzocIfEmzZ1orvfZigGhI29LC1_g-EhEiCMvkC5FGIaVl_UtNMvRIEBZh3SilOIRioEIIYE9HOfoNFMu7M18urmLeut41XZ6Bn1oZIUEJyNNHJHXuDHCPX2lQnoRDJ_FFQa23W2mHw"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -212,6 +210,7 @@ fun AiAssistantScreen(
 
     val errorMessage by viewModel.errorMessage.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showNotificationSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
@@ -234,13 +233,34 @@ fun AiAssistantScreen(
         }
     }
 
+    val authRepo = remember { com.example.tripmate.data.AuthRepository() }
+    val profileRepo = remember { com.example.tripmate.data.ProfileRepository() }
+    val currentUserId = remember { authRepo.currentUserId() }
+    val currentUserName = remember {
+        authRepo.currentUserName() ?: "Traveler"
+    }
+    var userAvatarUrl by remember {
+        mutableStateOf(com.example.tripmate.data.ProfileRepository.getCachedAvatarUrl() ?: authRepo.currentUserAvatarUrl().orEmpty())
+    }
+
+    LaunchedEffect(currentUserId) {
+        if (!currentUserId.isNullOrBlank()) {
+            val profile = profileRepo.fetchProfile(currentUserId)
+            val fetchedAvatar = profile?.avatarUrl
+            if (!fetchedAvatar.isNullOrBlank()) {
+                userAvatarUrl = fetchedAvatar
+            }
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             AssistantTopBar(
-                avatarUrl = ASSISTANT_USER_AVATAR_URL,
+                avatarUrl = userAvatarUrl,
+                userName = currentUserName,
                 onAvatarClick = onProfileClick,
                 onClearChatClick = {
                     viewModel.clearChat()
@@ -249,9 +269,7 @@ fun AiAssistantScreen(
                     }
                 },
                 onNotificationsClick = {
-                    coroutineScope.launch {
-                        snackbarHostState.showSnackbar("You're all caught up — no new notifications")
-                    }
+                    showNotificationSheet = true
                 }
             )
         },
@@ -531,6 +549,16 @@ fun AiAssistantScreen(
             }
         }
     }
+
+    if (showNotificationSheet) {
+        com.example.tripmate.ui.components.notifications.NotificationCenterSheet(
+            onDismiss = { showNotificationSheet = false },
+            onNavigateToTrip = {
+                showNotificationSheet = false
+                onMyTripsClick()
+            }
+        )
+    }
 }
 
 /**
@@ -539,6 +567,7 @@ fun AiAssistantScreen(
 @Composable
 private fun AssistantTopBar(
     avatarUrl: String,
+    userName: String = "Traveler",
     onNotificationsClick: () -> Unit,
     onClearChatClick: () -> Unit,
     onAvatarClick: () -> Unit = {},
@@ -553,16 +582,50 @@ private fun AssistantTopBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(
-                model = avatarUrl,
-                contentDescription = "Profile avatar",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .clickable { onAvatarClick() }
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-            )
+            if (avatarUrl.isNotBlank()) {
+                AsyncImage(
+                    model = avatarUrl,
+                    contentDescription = "Profile avatar",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable { onAvatarClick() }
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                )
+            } else {
+                val initials = remember(userName) {
+                    userName.trim().split(" ")
+                        .filter { it.isNotBlank() }
+                        .take(2)
+                        .map { it.first().uppercase() }
+                        .joinToString("")
+                        .ifBlank { "T" }
+                }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.linearGradient(
+                                listOf(
+                                    com.example.tripmate.ui.theme.PrimaryOrange,
+                                    com.example.tripmate.ui.theme.PrimaryOrangeVariant
+                                )
+                            )
+                        )
+                        .clickable { onAvatarClick() }
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = initials,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
             Spacer(modifier = Modifier.width(Dimens.sm))
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -596,12 +659,26 @@ private fun AssistantTopBar(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            val notifications by com.example.tripmate.data.NotificationRepository.notifications.collectAsState()
+            val unreadCount = notifications.count { !it.isRead }
+
             IconButton(onClick = onNotificationsClick) {
-                Icon(
-                    Icons.Filled.Notifications,
-                    contentDescription = "Notifications",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Box {
+                    Icon(
+                        Icons.Filled.Notifications,
+                        contentDescription = "Notifications",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (unreadCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .align(Alignment.TopEnd)
+                                .clip(CircleShape)
+                                .background(com.example.tripmate.ui.theme.PrimaryOrange)
+                        )
+                    }
+                }
             }
         }
     }
@@ -934,9 +1011,10 @@ private fun CompetitorStructuredMessage(rawText: String, onSpotClick: ((String) 
                             val context = androidx.compose.ui.platform.LocalContext.current
                             IconButton(
                                 onClick = {
-                                    val query = android.net.Uri.encode(spotName)
-                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("geo:0,0?q=$query"))
-                                    runCatching { context.startActivity(intent) }
+                                    com.example.tripmate.util.MapIntentHelper.launchMap(
+                                        context = context,
+                                        query = spotName
+                                    )
                                 },
                                 modifier = Modifier.size(28.dp)
                             ) {

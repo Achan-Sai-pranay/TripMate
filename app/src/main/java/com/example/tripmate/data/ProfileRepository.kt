@@ -7,9 +7,23 @@ class ProfileRepository {
 
     private val table = SupabaseClientProvider.client.from("profiles")
 
+    companion object {
+        @Volatile
+        private var cachedAvatarUrl: String? = null
+
+        fun getCachedAvatarUrl(): String? = cachedAvatarUrl
+        fun setCachedAvatarUrl(url: String?) {
+            cachedAvatarUrl = url
+        }
+    }
+
     suspend fun fetchProfile(userId: String): ProfileRow? =
         try {
-            table.select { filter { eq("id", userId) } }.decodeSingleOrNull()
+            val profile = table.select { filter { eq("id", userId) } }.decodeSingleOrNull<ProfileRow>()
+            if (!profile?.avatarUrl.isNullOrBlank()) {
+                cachedAvatarUrl = profile?.avatarUrl
+            }
+            profile
         } catch (_: Exception) {
             null
         }
