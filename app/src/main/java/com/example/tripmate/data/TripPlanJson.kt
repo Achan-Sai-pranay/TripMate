@@ -10,6 +10,9 @@ import com.example.tripmate.model.StayOption
 import com.example.tripmate.model.TravelLeg
 import com.example.tripmate.model.TripPlan
 import com.example.tripmate.util.ActivityIconMapper
+import com.example.tripmate.model.TripDocument
+import com.example.tripmate.model.DocumentCategory
+import com.example.tripmate.model.DocumentFileType
 import com.example.tripmate.util.CostParser
 import org.json.JSONArray
 import org.json.JSONObject
@@ -137,6 +140,29 @@ object TripPlanJson {
             wishlistArray.put(placeObj)
         }
 
+        val documentsArray = JSONArray()
+        plan.documents.forEach { doc ->
+            documentsArray.put(JSONObject().apply {
+                put("id", doc.id)
+                doc.tripId?.let { put("tripId", it) }
+                put("title", doc.title)
+                put("category", doc.category.name)
+                doc.confirmationNumber?.let { put("confirmationNumber", it) }
+                doc.provider?.let { put("provider", it) }
+                doc.dayIndex?.let { put("dayIndex", it) }
+                doc.dayLabel?.let { put("dayLabel", it) }
+                doc.linkedItemId?.let { put("linkedItemId", it) }
+                doc.linkedItemTitle?.let { put("linkedItemTitle", it) }
+                doc.fileUri?.let { put("fileUri", it) }
+                put("fileType", doc.fileType.name)
+                doc.fileName?.let { put("fileName", it) }
+                doc.fileSizeBytes?.let { put("fileSizeBytes", it) }
+                doc.dateTimeLabel?.let { put("dateTimeLabel", it) }
+                doc.notes?.let { put("notes", it) }
+                put("createdAt", doc.createdAt)
+            })
+        }
+
         return JSONObject().apply {
             put("id", plan.id)
             put("userId", plan.userId ?: JSONObject.NULL)
@@ -153,6 +179,7 @@ object TripPlanJson {
             put("membersCount", plan.membersCount)
             put("customExpenses", customExpensesArray)
             put("wishlistPlaces", wishlistArray)
+            put("documents", documentsArray)
         }
     }
 
@@ -326,6 +353,32 @@ object TripPlanJson {
                 )
             }
         } ?: emptyList()
+        val documents = root.optJSONArray("documents")?.let { docArray ->
+            (0 until docArray.length()).map { idx ->
+                val d = docArray.getJSONObject(idx)
+                val cat = runCatching { DocumentCategory.valueOf(d.getString("category")) }.getOrDefault(DocumentCategory.GENERAL)
+                val fType = runCatching { DocumentFileType.valueOf(d.optString("fileType", DocumentFileType.NONE.name)) }.getOrDefault(DocumentFileType.NONE)
+                TripDocument(
+                    id = d.optString("id", java.util.UUID.randomUUID().toString()),
+                    tripId = d.optString("tripId").takeIf { it.isNotBlank() && it != "null" },
+                    title = d.getString("title"),
+                    category = cat,
+                    confirmationNumber = d.optString("confirmationNumber").takeIf { it.isNotBlank() && it != "null" },
+                    provider = d.optString("provider").takeIf { it.isNotBlank() && it != "null" },
+                    dayIndex = if (d.has("dayIndex") && !d.isNull("dayIndex")) d.getInt("dayIndex") else null,
+                    dayLabel = d.optString("dayLabel").takeIf { it.isNotBlank() && it != "null" },
+                    linkedItemId = d.optString("linkedItemId").takeIf { it.isNotBlank() && it != "null" },
+                    linkedItemTitle = d.optString("linkedItemTitle").takeIf { it.isNotBlank() && it != "null" },
+                    fileUri = d.optString("fileUri").takeIf { it.isNotBlank() && it != "null" },
+                    fileType = fType,
+                    fileName = d.optString("fileName").takeIf { it.isNotBlank() && it != "null" },
+                    fileSizeBytes = if (d.has("fileSizeBytes") && !d.isNull("fileSizeBytes")) d.getLong("fileSizeBytes") else null,
+                    dateTimeLabel = d.optString("dateTimeLabel").takeIf { it.isNotBlank() && it != "null" },
+                    notes = d.optString("notes").takeIf { it.isNotBlank() && it != "null" },
+                    createdAt = d.optLong("createdAt", System.currentTimeMillis())
+                )
+            }
+        } ?: emptyList()
 
         return TripPlan(
             id = root.optString("id", java.util.UUID.randomUUID().toString()),
@@ -342,7 +395,8 @@ object TripPlanJson {
             isShared = root.optBoolean("isShared", false),
             membersCount = root.optInt("membersCount", 1),
             customExpenses = customExpenses,
-            wishlistPlaces = wishlistPlaces
+            wishlistPlaces = wishlistPlaces,
+            documents = documents
         )
     }
 }

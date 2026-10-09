@@ -37,5 +37,6 @@ data class TripPlan(
     val isShared: Boolean = false,
     val membersCount: Int = 1,
     val customExpenses: List<BudgetEntry> = emptyList(),
-    val wishlistPlaces: List<ItineraryItem> = emptyList()
+    val wishlistPlaces: List<ItineraryItem> = emptyList(),
+    val documents: List<TripDocument> = emptyList()
 )
