@@ -53,11 +53,12 @@ object RouteOptimizationHelper {
 
         // Partition into anchor items and variable segments
         val isAnchor = items.map { item ->
-            item.isFixed || item.category == ExpenseCategory.FOOD || item.placeDetails?.latitude == null
+            item.isFixed || item.category == ExpenseCategory.FOOD ||
+                item.placeDetails?.latitude == null || item.placeDetails?.longitude == null
         }
 
         // If all items are anchors or insufficient places have coordinates, return as-is
-        val coordinateCount = items.count { it.placeDetails?.latitude != null }
+        val coordinateCount = items.count { it.placeDetails?.latitude != null && it.placeDetails?.longitude != null }
         if (coordinateCount <= 2) return items
 
         val result = items.toMutableList()
@@ -96,6 +97,8 @@ object RouteOptimizationHelper {
         val nextItem = if (end < list.lastIndex) list[end + 1] else null
 
         val subList = list.subList(start, end + 1).toList()
+        val originalTimes = subList.map { it.time }
+        val originalBlocks = subList.map { it.timeBlock }
 
         // For small segment sizes (<= 7), evaluate permutations to find the optimal route
         val bestPermutation = if (subList.size <= 7) {
@@ -105,7 +108,10 @@ object RouteOptimizationHelper {
         }
 
         for (i in bestPermutation.indices) {
-            list[start + i] = bestPermutation[i]
+            list[start + i] = bestPermutation[i].copy(
+                time = originalTimes[i],
+                timeBlock = originalBlocks[i]
+            )
         }
     }
 

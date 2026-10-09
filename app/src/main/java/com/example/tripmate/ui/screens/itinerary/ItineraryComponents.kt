@@ -54,7 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.DirectionsCar
 import com.example.tripmate.model.TravelLeg
 import androidx.compose.material3.ButtonDefaults
@@ -288,88 +288,109 @@ fun DaySelector(
     onOptimizeRoute: (() -> Unit)? = null,
     onAddActivity: (() -> Unit)? = null
 ) {
-    Row(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(Dimens.xs)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "Day $dayNumber",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = " • $dateLabel",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
         Row(
-            horizontalArrangement = Arrangement.spacedBy(Dimens.xs),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (onOptimizeRoute != null) {
-                Surface(
-                    shape = RoundedCornerShape(Dimens.radiusFull),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(Dimens.radiusFull))
-                        .clickable { onOptimizeRoute() }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f, fill = false)
+            ) {
+                Text(
+                    text = "Day $dayNumber",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = " • $dateLabel",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Dimens.xs),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                DayNavButton(icon = Icons.Filled.ChevronLeft, onClick = onPreviousDay)
+                DayNavButton(icon = Icons.Filled.ChevronRight, onClick = onNextDay)
+            }
+        }
+
+        if (onOptimizeRoute != null || onAddActivity != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.xs),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (onOptimizeRoute != null) {
+                    Surface(
+                        shape = RoundedCornerShape(Dimens.radiusFull),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(Dimens.radiusFull))
+                            .clickable { onOptimizeRoute() }
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
-                            contentDescription = "Optimize Route",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = "Optimize",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = "Optimize Route",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                text = "Optimize Route",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+                if (onAddActivity != null) {
+                    Surface(
+                        shape = RoundedCornerShape(Dimens.radiusFull),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(Dimens.radiusFull))
+                            .clickable { onAddActivity() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = "Add Activity",
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                text = "+ Add Activity",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
                     }
                 }
             }
-            if (onAddActivity != null) {
-                Surface(
-                    shape = RoundedCornerShape(Dimens.radiusFull),
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(Dimens.radiusFull))
-                        .clickable { onAddActivity() }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = "Add Activity",
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = "+ Activity",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-                }
-            }
-            DayNavButton(icon = Icons.Filled.ChevronLeft, onClick = onPreviousDay)
-            DayNavButton(icon = Icons.Filled.ChevronRight, onClick = onNextDay)
         }
     }
 }
@@ -925,7 +946,7 @@ fun TimelineItemRow(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.DirectionsWalk,
+                                imageVector = if (leg.transportMode.equals("Walk", ignoreCase = true)) Icons.AutoMirrored.Filled.DirectionsWalk else Icons.Filled.DirectionsCar,
                                 contentDescription = null,
                                 modifier = Modifier.size(13.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1796,10 +1817,13 @@ fun EditItineraryItemDialog(
     onSave: (ItineraryItem) -> Unit
 ) {
     var title by remember { mutableStateOf(item.title) }
+    var placeName by remember { mutableStateOf(item.placeName ?: "") }
     var time by remember { mutableStateOf(item.time) }
     var duration by remember { mutableStateOf(item.durationLabel) }
     var cost by remember { mutableStateOf(item.costLabel) }
+    var notes by remember { mutableStateOf(item.notes ?: "") }
     var selectedCategory by remember { mutableStateOf(item.category) }
+    var selectedBlock by remember { mutableStateOf(item.resolvedTimeBlock) }
 
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
@@ -1809,12 +1833,51 @@ fun EditItineraryItemDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(Dimens.sm)
             ) {
-                androidx.compose.material3.OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                androidx.compose.material3.OutlinedTextField(value = time, onValueChange = { time = it }, label = { Text("Time") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                androidx.compose.material3.OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = placeName,
+                    onValueChange = { placeName = it },
+                    label = { Text("Place / Location Name (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(Dimens.sm)) {
-                    androidx.compose.material3.OutlinedTextField(value = duration, onValueChange = { duration = it }, label = { Text("Duration") }, singleLine = true, modifier = Modifier.weight(1f))
-                    androidx.compose.material3.OutlinedTextField(value = cost, onValueChange = { cost = it }, label = { Text("Cost") }, singleLine = true, modifier = Modifier.weight(1f))
+                    androidx.compose.material3.OutlinedTextField(
+                        value = time,
+                        onValueChange = { time = it },
+                        label = { Text("Time") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    androidx.compose.material3.OutlinedTextField(
+                        value = duration,
+                        onValueChange = { duration = it },
+                        label = { Text("Duration") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
+                androidx.compose.material3.OutlinedTextField(
+                    value = cost,
+                    onValueChange = { cost = it },
+                    label = { Text("Cost") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                androidx.compose.material3.OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("Insider Tip / Notes (optional)") },
+                    singleLine = false,
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Text("Category:", style = MaterialTheme.typography.labelSmall)
                 Row(
                     modifier = Modifier
@@ -1822,7 +1885,7 @@ fun EditItineraryItemDialog(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    ExpenseCategory.values().forEach { cat ->
+                    ExpenseCategory.entries.forEach { cat ->
                         FilterChip(
                             selected = selectedCategory == cat,
                             onClick = { selectedCategory = cat },
@@ -1830,29 +1893,49 @@ fun EditItineraryItemDialog(
                         )
                     }
                 }
+                Text("Time Block:", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TimeBlock.entries.forEach { block ->
+                        FilterChip(
+                            selected = selectedBlock == block,
+                            onClick = { selectedBlock = block },
+                            label = { Text(block.label) }
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            androidx.compose.material3.TextButton(onClick = {
-                val renamed = title.trim() != item.title
-                val parsedCost = com.example.tripmate.util.CostParser.parseRupees(cost)
-                // A renamed activity is a different place: drop the old location so it is re-geocoded.
-                onSave(
-                    item.copy(
-                        title = title.trim(),
-                        time = time.trim(),
-                        durationLabel = duration.trim(),
-                        costLabel = cost.trim(),
-                        costAmount = parsedCost,
-                        category = selectedCategory,
-                        placeName = if (renamed) null else item.placeName,
-                        imageUrl = if (renamed) null else item.imageUrl,
-                        placeDetails = if (renamed) {
-                            item.placeDetails?.copy(latitude = null, longitude = null)
-                        } else item.placeDetails
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    val renamed = title.trim() != item.title
+                    val parsedCost = com.example.tripmate.util.CostParser.parseRupees(cost)
+                    // A renamed activity is a different place: drop the old location so it is re-geocoded.
+                    onSave(
+                        item.copy(
+                            title = title.trim(),
+                            time = time.trim(),
+                            durationLabel = duration.trim(),
+                            costLabel = cost.trim(),
+                            costAmount = parsedCost,
+                            category = selectedCategory,
+                            timeBlock = selectedBlock.name,
+                            notes = notes.trim().takeIf { it.isNotBlank() },
+                            placeName = if (placeName.isNotBlank()) placeName.trim() else if (renamed) null else item.placeName,
+                            imageUrl = if (renamed) null else item.imageUrl,
+                            placeDetails = if (renamed) {
+                                item.placeDetails?.copy(latitude = null, longitude = null)
+                            } else item.placeDetails
+                        )
                     )
-                )
-            }) { Text("Save") }
+                },
+                enabled = title.isNotBlank()
+            ) { Text("Save") }
         },
         dismissButton = {
             androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") }

@@ -325,6 +325,13 @@ fun AiAssistantScreen(
                                         icon = ActivityIconMapper.iconFor(place.placeName),
                                         placeName = place.placeName
                                     )
+                                    val ctx = currentContext
+                                    if (ctx is AssistantContext.Trip) {
+                                        val currentLoaded = tripPlanViewModel?.tripPlan?.value
+                                        if (currentLoaded?.id != ctx.tripPlan.id) {
+                                            tripPlanViewModel?.loadTrip(ctx.tripPlan)
+                                        }
+                                    }
                                     tripPlanViewModel?.addItemToDay(targetDayIndex, newItem)
                                     coroutineScope.launch {
                                         snackbarHostState.showSnackbar("Added \"${place.placeName}\" to Day ${place.dayNumber} itinerary!")
@@ -742,13 +749,13 @@ private fun CompetitorChatBubble(
         ) {
             Surface(
                 shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomStart = 18.dp, bottomEnd = 4.dp),
-                color = Color(0xFFF1F3F5),
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.widthIn(max = 290.dp)
             ) {
                 Text(
                     text = message.text,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.5.sp),
-                    color = Color(0xFF1E293B),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                 )
@@ -1197,7 +1204,7 @@ private fun ActionablePlaceCard(
                 Text(
                     text = "${place.time} • ${place.costLabel}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF64748B),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -1206,13 +1213,13 @@ private fun ActionablePlaceCard(
                 text = place.placeName,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF0F172A)
+                color = MaterialTheme.colorScheme.onSurface
             )
             if (place.whyThis.isNotBlank()) {
                 Text(
                     text = place.whyThis,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF475569),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
                 )
             }
@@ -1283,7 +1290,10 @@ private fun AssistantContextBar(
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text(
                             text = when (currentContext) {
                                 is AssistantContext.Trip -> currentContext.tripPlan.destination
@@ -1291,7 +1301,10 @@ private fun AssistantContextBar(
                             },
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Surface(
@@ -1304,7 +1317,7 @@ private fun AssistantContextBar(
                                     is AssistantContext.Global -> "All Travel"
                                 },
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = TextSecondary,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                             )
                         }
@@ -1315,7 +1328,7 @@ private fun AssistantContextBar(
                             is AssistantContext.Global -> "Worldwide advice • Tap to choose a trip"
                         },
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1325,7 +1338,7 @@ private fun AssistantContextBar(
             Icon(
                 imageVector = Icons.Filled.KeyboardArrowDown,
                 contentDescription = "Switch Context",
-                tint = TextSecondary,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
             )
 
@@ -1334,7 +1347,7 @@ private fun AssistantContextBar(
                 onDismissRequest = { expanded = false },
                 modifier = Modifier
                     .widthIn(min = 280.dp)
-                    .background(Color.White)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             ) {
                 DropdownMenuItem(
                     text = {
@@ -1342,12 +1355,12 @@ private fun AssistantContextBar(
                             Text(
                                 text = "🌐 Global Travel Guide",
                                 fontWeight = if (currentContext is AssistantContext.Global) FontWeight.Bold else FontWeight.Normal,
-                                color = if (currentContext is AssistantContext.Global) PrimaryOrange else TextPrimary
+                                color = if (currentContext is AssistantContext.Global) PrimaryOrange else MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "General advice, packing tips, worldwide destinations",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = TextSecondary
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     },
@@ -1362,7 +1375,7 @@ private fun AssistantContextBar(
                     Text(
                         text = "YOUR PLANNED TRIPS",
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                        color = TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                     )
                     availableTrips.forEach { trip ->
@@ -1373,12 +1386,12 @@ private fun AssistantContextBar(
                                     Text(
                                         text = "✈️ ${trip.destination}",
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) PrimaryOrange else TextPrimary
+                                        color = if (isSelected) PrimaryOrange else MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
                                         text = "${trip.dateRangeLabel} • ${trip.days.size} days • ${trip.travelerCount} traveler(s)",
                                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                        color = TextSecondary
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             },
