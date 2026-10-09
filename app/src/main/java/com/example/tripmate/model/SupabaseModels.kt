@@ -44,6 +44,13 @@ data class ExpenseRow(
     val notes: String? = null
 )
 
+val ExpenseRow.currencyMeta: CurrencyMeta? get() = CurrencyMeta.decode(notes)
+val ExpenseRow.originalCurrency: String? get() = currencyMeta?.originalCurrency
+val ExpenseRow.originalAmount: Double? get() = currencyMeta?.originalAmount
+val ExpenseRow.exchangeRate: Double? get() = currencyMeta?.exchangeRate
+val ExpenseRow.cleanNotes: String? get() = currencyMeta?.userNotes ?: notes
+
+
 @Serializable
 data class ExpenseSplitRow(
     val id: String? = null,

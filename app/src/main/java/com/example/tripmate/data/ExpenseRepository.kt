@@ -77,6 +77,14 @@ class ExpenseRepository {
         }
     }
 
+    suspend fun getTrip(tripId: String): TripRow? {
+        return try {
+            trips.select { filter { eq("id", tripId) } }.decodeSingleOrNull<TripRow>()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun listExpenses(tripId: String): List<ExpenseRow> {
         return try {
             expenses.select { filter { eq("trip_id", tripId) } }.decodeList()
@@ -87,13 +95,15 @@ class ExpenseRepository {
 
     /**
      * Adds one expense and immediately splits it equally among all current trip members.
+     * Supports optional notes carrying encoded currency metadata for international trips.
      */
     suspend fun addExpenseEqualSplit(
         tripId: String,
         paidBy: String,
         description: String,
         amount: Double,
-        category: String?
+        category: String?,
+        notes: String? = null
     ) {
         val expense = expenses.insert(
             ExpenseRow(
@@ -101,7 +111,8 @@ class ExpenseRepository {
                 paidBy = paidBy,
                 description = description,
                 amount = amount,
-                category = category
+                category = category,
+                notes = notes
             )
         ) { select() }.decodeSingle<ExpenseRow>()
 
