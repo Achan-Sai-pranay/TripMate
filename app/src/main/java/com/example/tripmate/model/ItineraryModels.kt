@@ -107,6 +107,41 @@ data class ItineraryItem(
 ) {
     val geocodeQuery: String? get() = (placeName?.takeIf { it.isNotBlank() } ?: title).trim().takeIf { it.isNotBlank() }
     val hasCoordinates: Boolean get() = placeDetails?.latitude != null && placeDetails.longitude != null
+    val resolvedTimeBlock: TimeBlock get() = TimeBlock.fromString(timeBlock) ?: TimeBlock.inferFromTime(time)
+}
+
+enum class TimeBlock(val label: String) {
+    MORNING("Morning"),
+    AFTERNOON("Afternoon"),
+    EVENING("Evening"),
+    NIGHT("Night");
+
+    companion object {
+        fun fromString(value: String?): TimeBlock? {
+            if (value.isNullOrBlank()) return null
+            val upper = value.trim().uppercase()
+            return entries.firstOrNull { it.name == upper || it.label.uppercase() == upper }
+        }
+
+        fun inferFromTime(time: String): TimeBlock {
+            val clean = time.uppercase().trim()
+            val hourMatch = Regex("""(\d{1,2})""").find(clean)
+            val hour = hourMatch?.value?.toIntOrNull() ?: 10
+            val isPm = clean.contains("PM")
+            val isAm = clean.contains("AM")
+            val hour24 = when {
+                isPm && hour < 12 -> hour + 12
+                isAm && hour == 12 -> 0
+                else -> hour
+            }
+            return when {
+                hour24 < 12 -> MORNING
+                hour24 < 17 -> AFTERNOON
+                hour24 < 20 -> EVENING
+                else -> NIGHT
+            }
+        }
+    }
 }
 
 enum class ItineraryTab(val label: String) {
@@ -116,3 +151,4 @@ enum class ItineraryTab(val label: String) {
     DINING("Dining"),
     BUDGET("Budget")
 }
+

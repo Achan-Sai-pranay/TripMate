@@ -276,6 +276,16 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
             Food preferences/restrictions: $foodLabel.
             Do not add filler items like 'Wake up'/'Morning refresh'; only real activities and meals.
 
+            CRITICAL GEOGRAPHIC CLUSTERING (WANDERLOG-STYLE):
+            Group each day's activities tightly within ONE compact neighborhood, district, or geographic area (e.g. Day 1: Old City/Heritage Quarter, Day 2: Waterfront/Beach District, Day 3: Modern Downtown & Arts). Never bounce back and forth between distant parts of the city within the same day.
+
+            CRITICAL PACING & TIME-OF-DAY BLOCKS:
+            Organize each day chronologically into 4 to 5 well-paced activities across distinct time blocks:
+            - "MORNING" (09:00 AM - 12:00 PM): Major cultural landmark, outdoor activity, or scenic spot.
+            - "AFTERNOON" (12:30 PM - 04:30 PM): Authentic lunch/cafe stop followed by nearby walking or museum.
+            - "EVENING" (05:00 PM - 07:30 PM): Sunset viewpoint, promenade, market stroll, or local workshop.
+            - "NIGHT" (08:00 PM - 10:00 PM): Signature dinner at a top-rated local dining venue or nightlife spot.
+
             CRITICAL CURRENCY INSTRUCTION:
             The default currency for the entire app is Indian Rupees (₹).
             All activity costs, entrance fees, hotel prices, and dining prices must ALWAYS be in Indian Rupees (₹),
@@ -294,6 +304,7 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
             2. 3-4 famous local Dining spots with cuisine, priceRange in ₹ (e.g. ₹300-₹700), famousFor dish, and rating (>= 4.3).
             3. For each itinerary item, provide place details: rating (e.g. 4.6), reviewCount (e.g. 1540), openingHours (e.g. 9:00 AM - 6:00 PM), and accurate real-world latitude and longitude for the physical place/attraction (e.g. latitude: 34.1167, longitude: 74.8728 for Dal Lake). Provide distinct coordinates for every different activity so each day's map is accurate and never in a straight line.
             4. Travel info to the next stop: distanceLabel (e.g. "2.4 km"), durationLabel (e.g. "12 mins"), transportMode (e.g. "Drive", "Walk", "Metro").
+            5. "notes": A short, actionable insider tip (e.g. "Pre-book tickets online to skip queue", "Best photography spot from east terrace", "Famous for mutton rogan josh").
 
             Return ONLY raw JSON (no markdown fences, no prose) matching exactly this shape:
             {
@@ -303,12 +314,14 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                   "items": [
                     {
                       "time": "09:00 AM",
+                      "timeBlock": "MORNING",
                       "title": "...",
                       "durationLabel": "1.5h",
                       "costLabel": "₹300",
                       "costAmount": 300,
                       "category": "ACTIVITIES",
                       "whyThis": "one short sentence",
+                      "notes": "Insider tip for visitors",
                       "placeName": "real, searchable name of the specific place or venue, e.g. Fort Aguada (null for generic activities such as free time or hotel check-in)",
                       "wikipediaTitle": "exact Wikipedia article title if known, e.g. Fort Aguada (or null)",
                       "placeDetails": { "rating": 4.6, "reviewCount": 2400, "openingHours": "09:00 AM - 05:30 PM", "latitude": 34.0837, "longitude": 74.7973 },
@@ -374,6 +387,8 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                 } ?: ActivityIconMapper.categoryFor(title)
 
                 val wikipediaTitle = itemObj.optString("wikipediaTitle").takeIf { it.isNotBlank() && it != "null" }
+                val timeBlock = itemObj.optString("timeBlock").takeIf { it.isNotBlank() && it != "null" }
+                val notes = itemObj.optString("notes").takeIf { it.isNotBlank() && it != "null" }
 
                 ItineraryItem(
                     time = itemObj.getString("time"),
@@ -389,7 +404,9 @@ class TripPlanViewModel(application: Application) : AndroidViewModel(application
                     placeName = if (itemObj.has("placeName")) {
                         itemObj.optString("placeName").takeIf { it.isNotBlank() && it != "null" }
                     } else null,
-                    wikipediaTitle = wikipediaTitle
+                    wikipediaTitle = wikipediaTitle,
+                    timeBlock = timeBlock,
+                    notes = notes
                 )
             }
             ItineraryDay(

@@ -101,6 +101,8 @@ class ItineraryAiViewModel : ViewModel() {
             val placeName = if (obj.has("placeName")) {
                 if (obj.isNull("placeName")) "" else obj.optString("placeName").takeIf { it != "null" } ?: ""
             } else null
+            val timeBlock = obj.optString("timeBlock").takeIf { it.isNotBlank() && it != "null" }
+            val notes = obj.optString("notes").takeIf { it.isNotBlank() && it != "null" }
 
             ItineraryItem(
                 time = obj.getString("time"),
@@ -112,7 +114,9 @@ class ItineraryAiViewModel : ViewModel() {
                 whyThis = obj.optString("whyThis", ""),
                 icon = ActivityIconMapper.iconFor(title),
                 placeName = placeName,
-                wikipediaTitle = wikipediaTitle
+                wikipediaTitle = wikipediaTitle,
+                timeBlock = timeBlock,
+                notes = notes
             )
         }
     }
